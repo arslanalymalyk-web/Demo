@@ -10,10 +10,10 @@ git diff --quiet && git diff --cached --quiet || { echo "refusing: the working t
 commit="$(git rev-parse --short HEAD)"; name="tigeris-$commit"; out="dist-offline"; work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
 mkdir -p "$out" "$work/$name"
 git archive HEAD | tar -x -C "$work/$name"
-pnpm fetch --store-dir "$work/pnpm-store"
+# Fetch inside the exported copy, so the repository's own node_modules is left alone.
+( cd "$work/$name" && pnpm fetch --store-dir "$work/pnpm-store" )
 pnpm -s sbom >/dev/null && cp -r docs/handover/sbom "$work/$name/sbom"
 pnpm -s web:build >/dev/null && cp -r apps/web/dist "$work/$name/web-dist"
-mv "$work/pnpm-store" "$work/$name/../pnpm-store" 2>/dev/null || true
 ( cd "$work" && tar -czf "$OLDPWD/$out/$name-offline.tar.gz" "$name" pnpm-store )
 ( cd "$out" && sha256sum "$name-offline.tar.gz" > "$name-offline.sha256" )
 echo "wrote $out/$name-offline.tar.gz ($(du -h "$out/$name-offline.tar.gz" | cut -f1)); checksum in $out/$name-offline.sha256"
