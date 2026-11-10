@@ -126,7 +126,7 @@ body[data-motion="reduced"] *, body[data-motion="reduced"] *::before { animation
 .authority { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; background: var(--paper); border: 1px solid var(--line); border-inline-start: 4px solid var(--gold); border-radius: var(--radius); padding: 12px 16px; margin-bottom: 18px; }
 .authority dt { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-3); font-weight: 600; } .authority dd { margin: 2px 0 0; font-size: 14px; }
 .rules { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; } .rules li { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
-.timeline { list-style: none; margin: 0; padding: 0; border-inline-start: 2px solid var(--line); } .timeline li { position: relative; padding: 0 0 16px 18px; } .timeline li::before { content: ""; position: absolute; inset-inline-start: -7px; top: 5px; width: 12px; height: 12px; border-radius: 50%; background: var(--paper); border: 2px solid var(--gold); }
+.timeline { list-style: none; margin: 0; padding: 0; border-inline-start: 2px solid var(--line); } .timeline li { position: relative; padding-block: 0 16px; padding-inline: 18px 0; } .timeline li::before { content: ""; position: absolute; inset-inline-start: -7px; top: 5px; width: 12px; height: 12px; border-radius: 50%; background: var(--paper); border: 2px solid var(--gold); }
 [dir="rtl"] .timeline li { padding: 0 18px 16px 0; }
 form.stack { display: flex; flex-direction: column; gap: 12px; align-items: flex-start; } form.stack label { width: 100%; } form.stack textarea, form.stack input[type=text], form.stack select { width: 100%; }
 textarea { font: inherit; min-height: 84px; resize: vertical; }
@@ -180,3 +180,12 @@ svg.map .edge.flow { stroke-dasharray: 6 6; }
 
 /* a table inside a stacked form scrolls within its own box instead of widening the page */
 form.stack > .tablewrap { align-self: stretch; max-width: 100%; min-width: 0; }
+
+/* Arabic: system Arabic faces, no letter-spacing (it breaks the joining of letters), charts keep the conventional left-to-right time axis */
+:root[lang="ar"] {
+  --sans: "Noto Sans Arabic", "Segoe UI", Tahoma, "Geeza Pro", "DejaVu Sans", system-ui, sans-serif;
+  --serif: "Noto Naskh Arabic", "Amiri", "Traditional Arabic", "Geeza Pro", "DejaVu Serif", serif;
+}
+:root[lang="ar"] h1, :root[lang="ar"] h2, :root[lang="ar"] .brand, :root[lang="ar"] .brand small, :root[lang="ar"] th { letter-spacing: 0; }
+:root[lang="ar"] body { line-height: 1.7; }
+.chart, .tornado { direction: ltr; }

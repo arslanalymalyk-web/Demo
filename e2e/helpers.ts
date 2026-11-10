@@ -19,3 +19,27 @@ export function watch(page: Page): { problems: string[] } {
 }
 
 export const go = async (page: Page, hash: string) => { await page.goto(`/#${hash}`); await expect(page.locator("main#main")).toBeVisible(); };
+
+/** What a screen reader and a keyboard user need, checked without a third-party rules engine. */
+export async function accessibilityBasics(page: Page, name: string): Promise<string[]> {
+  return page.evaluate(() => {
+    const out: string[] = [];
+    if (document.querySelectorAll("h1").length !== 1) out.push(`expected one h1, found ${document.querySelectorAll("h1").length}`);
+    if (document.querySelectorAll("main").length !== 1) out.push("expected one main landmark");
+    if (!document.querySelector("nav[aria-label]")) out.push("no labelled navigation");
+    if (document.documentElement.lang === "") out.push("the page has no language");
+    const text = (el: Element) => (el.getAttribute("aria-label") ?? el.textContent ?? "").trim();
+    for (const b of document.querySelectorAll("button")) if (!text(b) && !b.getAttribute("aria-labelledby") && !b.title) out.push("a button has no name");
+    for (const a of document.querySelectorAll("a[href]")) if (!text(a) && !a.getAttribute("aria-labelledby")) out.push(`a link has no name: ${a.getAttribute("href")}`);
+    for (const i of document.querySelectorAll("input:not([type=hidden]), select, textarea")) {
+      const el = i as HTMLInputElement, labelled = el.closest("label") || el.getAttribute("aria-label") || el.getAttribute("aria-labelledby") || (el.id && document.querySelector(`label[for="${el.id}"]`));
+      if (!labelled) out.push(`a form field has no label (${el.tagName.toLowerCase()} ${el.type ?? ""})`);
+    }
+    for (const img of document.querySelectorAll("img")) if (!img.hasAttribute("alt")) out.push("an image has no alt text");
+    const ids = [...document.querySelectorAll("[id]")].map(e => e.id), dup = ids.filter((x, i) => ids.indexOf(x) !== i);
+    if (dup.length) out.push(`duplicate ids: ${[...new Set(dup)].join(", ")}`);
+    for (const t of document.querySelectorAll("table")) if (!t.closest("[role=region][aria-label]") && !t.getAttribute("aria-label") && !t.querySelector("caption")) out.push("a table has no accessible name");
+    return out;
+  }).then(r => r.map(x => `${name}: ${x}`));
+}
+

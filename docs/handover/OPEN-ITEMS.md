@@ -28,6 +28,12 @@ _Confidential. Property of Tiger Capital AI. Prepared for the named recipients o
 3. A host, TLS certificate, secret store and backup location.
 4. The names of the first administrators (two, for settings approval).
 
+## Arabic interface
+
+1. A native Arabic reviewer for `apps/web/src/i18n-ar.ts` and the terms table in [I18N.md](I18N.md), before the interface is shown to a client.
+2. Decide whether the remaining screens (Evidence, Documents, Cases, Scenarios, Settings and the rest) are translated in the next release.
+3. Decide whether sentences computed from the stored records are composed in Arabic on the server. This needs structured values and a review of every sentence so that no figure changes.
+
 ## Scheduled ingestion
 
 1. Which approved sources to fetch automatically and how often.

@@ -10,6 +10,7 @@ TIGERIS AI OS is an institution-owned, model-agnostic intelligence system where 
 | **A Tiger Capital AI engineer** | [ARCHITECTURE.md](ARCHITECTURE.md) | [ENGINEERING.md](ENGINEERING.md), `docs/adr/`, `docs/decisions/` |
 | **The client's IT or security team** | [DEPLOYMENT.md](DEPLOYMENT.md) | [SECURITY.md](SECURITY.md), [DATA-FLOWS.md](DATA-FLOWS.md), [CONTROL-MATRIX.md](CONTROL-MATRIX.md), [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md) |
 | **An operator who runs it daily** | [RUNBOOK.md](RUNBOOK.md) | [BACKUP-RESTORE.md](BACKUP-RESTORE.md) |
+| **A reviewer of the Arabic wording** | [I18N.md](I18N.md) | `apps/web/src/i18n-ar.ts` |
 
 ## What is in the repository
 
@@ -20,8 +21,8 @@ TIGERIS AI OS is an institution-owned, model-agnostic intelligence system where 
 | `packages/*` | The modules: `core`, `connectors`, `ingest`, `graph`, `scenario`, `identity`, `cases`, `governance`, `documents`, `sectors`, `settings`, `retention`, `reasoning`, `scheduler`, `setup` |
 | `db/migrations` | Thirteen numbered SQL migrations, run by the owner role only |
 | `deploy/` | Container, proxy, database and backup files |
-| `docs/adr`, `docs/decisions` | Twenty-three architecture decision records and the 200-answer decision log with its resolutions |
-| `tests/`, `e2e/` | 278 unit and integration tests (one needs a real ClamAV daemon and is skipped without one) and 24 browser tests |
+| `docs/adr`, `docs/decisions` | Twenty-five architecture decision records and the 200-answer decision log with its resolutions |
+| `tests/`, `e2e/` | 283 unit and integration tests (one needs a real ClamAV daemon and is skipped without one) and 28 browser tests |
 | `scripts/` | Database bootstrap, SBOM and licence check, offline bundle, geography build |
 
 ## Rules that bind everyone (from `CLAUDE.md`)

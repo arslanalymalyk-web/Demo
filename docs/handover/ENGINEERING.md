@@ -40,6 +40,10 @@ Runs the wording lint, the type check and all tests. Database tests need `DATABA
 
 `pnpm e2e` runs Playwright against the real API, the web app and a throwaway local identity provider, on the test database. Each run seeds a fresh institution (`e2e/seed.ts`: roles, people, approved sources and stored records dated relative to today, written through the normal ingestion pipeline). The specs sign in through the authorization-code flow with PKCE, open every screen, and check for script and console errors, failed requests, sideways scrolling on a phone in both reading directions, and basic accessibility (one h1, landmarks, names on buttons, links and fields, table names, keyboard skip link and focus). They also walk the briefing, assistant, documents with malware scan states, the two-person settings flow, source health and opening a case from a signal. Needs `DATABASE_URL_TEST_OWNER` and `DATABASE_URL_TEST`, and a Chromium (`pnpm exec playwright install chromium`). The API log is piped to the output, so a failure shows its cause. CI runs it after `pnpm check`.
 
+## Translations
+
+Visible text goes through `t("English text")` (or `tx(...)` in constants). Arabic wording is in `apps/web/src/i18n-ar.ts`; `node scripts/i18n.mjs` lists anything without Arabic, and `tests/web/i18n.test.ts` fails on a missing entry, a changed placeholder or an unused entry. See [I18N.md](I18N.md).
+
 ## Wording rule
 
 `pnpm lint:wording` forbids the words that frame the product as unfinished or as an exhibit. It scans code, UI text, tests, file names and docs, except `CLAUDE.md`, `docs/decisions/**` and `docs/adr/**`. Use **Scenario simulation**, **Sample dataset**, **Public record**, **Source not connected** and **Snapshot as of <date>**.

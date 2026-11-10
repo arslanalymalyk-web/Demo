@@ -8,7 +8,7 @@ TIGERIS AI OS is an intelligence system owned by the institution that runs it. E
 
 ## What exists today
 
-- **Core:** ingestion of public records with provenance, a link graph with explicit link classes (observed, sourced, inferred, assumed, sample), a deterministic scenario engine with exact replay, identity with multi-factor sign-in and seven roles, governance and cases with a policy gate and human-owned handoffs, institutional memory, document intake with OCR, governed settings approved by two people, and ten-year retention tools, an executive briefing per pack, a model-agnostic assistant whose every figure is verified against stored records, scheduled ingestion with a source-health screen, and fail-closed malware scanning of uploads.
+- **Core:** ingestion of public records with provenance, a link graph with explicit link classes (observed, sourced, inferred, assumed, sample), a deterministic scenario engine with exact replay, identity with multi-factor sign-in and seven roles, governance and cases with a policy gate and human-owned handoffs, institutional memory, document intake with OCR, governed settings approved by two people, and ten-year retention tools, an executive briefing per pack, a model-agnostic assistant whose every figure is verified against stored records, scheduled ingestion with a source-health screen, fail-closed malware scanning of uploads, and an Arabic interface (right-to-left layout on every screen, Arabic wording on the executive screens, pending native review).
 - **Two packs:** Energy and Oil, and Sovereign Capital and Treasury. Each has three scenario templates and a command centre with signal rules.
 - **Live map:** Gulf map built from public-domain geography, with chokepoints, routes, terminals and stored series drawn on it. Facility positions are approximate and routes are schematic, and the screen says so.
 - **Real data:** DataSaudi, IMF, JODI and an EIA article are stored with provenance. Example findings from stored data: Saudi crude exports are 31% below their 12-month median, and reserve assets fell 5.8% in the latest quarter.
@@ -16,7 +16,7 @@ TIGERIS AI OS is an intelligence system owned by the institution that runs it. E
 
 ## What is proved
 
-278 automated tests pass against a real database, and 24 browser tests walk every screen against the real API. A disaster-recovery drill, a proxy and browser test, an offline install and a dependency audit (zero known vulnerabilities) were run for real. See [VERIFICATION-REPORT.md](VERIFICATION-REPORT.md).
+283 automated tests pass against a real database, and 28 browser tests walk every screen against the real API. A disaster-recovery drill, a proxy and browser test, an offline install and a dependency audit (zero known vulnerabilities) were run for real. See [VERIFICATION-REPORT.md](VERIFICATION-REPORT.md).
 
 ## What is not proved
 
