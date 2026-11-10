@@ -1,0 +1,44 @@
+# Open items: what is needed from people
+
+_Confidential. Property of Tiger Capital AI. Prepared for the named recipients only._
+
+## From Tiger Capital AI
+
+1. Real signal thresholds, scenario default assumptions and ranges. The values now active are working values; the system proves who set them, not that they are right.
+2. Sourced Hormuz exposure and bypass capacity values (currently labelled by link class and rationale).
+3. Verified facility positions, checked against a gazetteer. Positions are approximate until then.
+4. The USPTO blueprint material, and any written terms for TankerMap or vessel data.
+5. Legal wording for ownership and licence, and the signed NDA and data processing agreement filed with the pack.
+6. Name a security contact for vulnerability reports.
+7. Owner-written policies for the Organisational rows in [CONTROL-MATRIX.md](CONTROL-MATRIX.md): security policy set, risk register, staff process, continuity plan.
+
+## Source rights and data
+
+1. Licence confirmations for DataSaudi, GCC-Stat, JODI and IMF.
+2. An approved access route for IMF data.
+3. The unit for GDP and the period of the M3 growth rate.
+4. Permission requests to the Qatar and Bahrain data teams.
+5. Widening Gulf coverage to the UAE, Qatar, Oman and Iran once rights are confirmed. Iraq data stops at March 2024 and is shown as lagging.
+6. Arabic scan samples to measure OCR accuracy.
+
+## From the client
+
+1. Identity provider details: issuer, audience, redirect addresses, the multi-factor claim, token endpoint cross-origin permission, key rotation. Then a real sign-in test.
+2. The client's own security review, recorded, before client data or institution documents are enabled.
+3. A host, TLS certificate, secret store and backup location.
+4. The names of the first administrators (two, for settings approval).
+
+## Engineering and verification
+
+1. Run the CI `images` job and review the image inventory (the images have never been built).
+2. Run the CI workflow on GitHub.
+3. Run the backup drill in the client's environment and against the official PostgreSQL image.
+4. Commission the independent penetration test (decision 11).
+5. Add a malware scanner in front of uploads.
+6. A dedicated environment setup script for the development cloud environment: Tesseract and PostgreSQL were installed only in the working container and are not in the shared default environment.
+7. Decide whether high availability is needed beyond the first client.
+
+## Known data notes
+
+- One early scenario run (`e75437b4…`) replays with a different results hash, because its stored bands predate the clamp for non-negative measures. Its stored rows still match. It is immutable and is disclosed rather than edited.
+- The development database holds extra test cases, a legal hold on CASE-0004, one case export and extra development principals. They cannot be deleted by design and must not be carried into a client deployment; create a fresh database there.

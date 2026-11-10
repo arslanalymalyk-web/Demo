@@ -1,0 +1,41 @@
+id,control,soc2,iso27001_2022,status,evidence
+C01,Token verification with multi-factor claim,CC6.1,"A.5.15, A.8.5",Partial (development provider only),packages/identity
+C02,"Provisioned principals, roles and permissions","CC6.2, CC6.3","A.5.15, A.5.18",Implemented,packages/identity/src/permissions.ts
+C03,Default-deny route access map,CC6.1,A.8.3,Implemented,server refuses to start without a rule per route
+C04,Separation of duty,"CC5.1, CC6.3",A.5.3,Implemented,decisions/settings/policy tests
+C05,"Row-level security, forced",CC6.1,A.8.3,Implemented,tenancy tests in every module
+C06,"Least-privilege database role, start-up check","CC6.1, CC6.3","A.8.2, A.8.9",Implemented,apps/api/src/startup.ts
+C07,No deletion; grants test,CC6.1,A.8.3,Implemented,tests/retention.test.ts
+C08,Immutable evidence and records,"PI1.4, CC7.2",A.8.15,Implemented,triggers and attack tests
+C09,Hash-chained audit trail,"CC7.2, CC4.1",A.8.15,Implemented,audit trigger; deploy/backup/verify-audit.sql
+C10,Encryption in transit (TLS 1.2 and 1.3),CC6.7,A.8.24,Partial (proved with a self-signed certificate),nginx probe results
+C11,"Security headers, strict CSP",CC6.6,A.8.26,Implemented,browser run with zero violations
+C12,Rate limiting and body limits,CC6.6,A.8.20,Implemented,hardening tests and proxy probes
+C13,"Egress deny-by-default, allowlist",CC6.6,"A.8.20, A.8.22",Implemented,connector tests
+C14,Secrets from files or environment,CC6.1,"A.8.24, A.5.17",Implemented,packages/core/src/secrets.ts
+C15,Production configuration checks,CC8.1,A.8.9,Implemented,apps/api/src/config.ts
+C16,Structured logs with redaction; request ids,"CC7.1, CC7.2","A.8.15, A.8.16",Implemented,pino setup and global error handler
+C17,"Health, readiness and Prometheus metrics","A1.1, CC7.1",A.8.16,Implemented,"/health, /ready, /metrics"
+C18,Encrypted point-in-time backups,A1.2,A.8.13,Partial (Debian layout drill only),deploy/backup
+C19,"Restore verified, audit chain checked",A1.3,"A.8.13, A.5.30",Partial (not in client environment),deploy/backup/verify-restore.sh
+C20,High availability,A1.2,A.8.14,Gap (single node by decision),VERIFICATION-REPORT item 7
+C21,"Ten-year retention, holds, exports","C1.2, PI1.5","A.5.33, A.8.10",Implemented,packages/retention
+C22,Input validation and parameterised SQL,"CC6.6, PI1.2",A.8.28,Implemented,tests
+C23,Upload safety limits,CC6.8,A.8.7,Partial,packages/documents
+C24,Malware scanning of uploads,CC6.8,A.8.7,Gap,VERIFICATION-REPORT item 5
+C25,"Dependency audit, licence check","CC7.1, CC9.2","A.8.8, A.5.21",Implemented,pnpm audit and sbom:check
+C26,Software bill of materials,CC9.2,A.5.21,Partial (npm packages only),docs/handover/sbom
+C27,Offline install bundle,CC8.1,A.8.19,Implemented,scripts/offline-bundle.sh
+C28,CI checks,CC8.1,"A.8.25, A.8.29",Partial (workflow never run),.github/workflows/ci.yml
+C29,Independent penetration test,CC4.1,A.8.29,Gap,decision 11
+C30,Provenance on every figure,"PI1.1, PI1.3",A.5.9,Implemented,tests
+C31,Deterministic computation; exact replay,PI1.2,A.8.28,Implemented,scenario tests
+C32,"Governed settings, two-person activation","CC5.2, CC8.1",A.8.32,Implemented,packages/settings tests
+C33,Information security policy set,"CC1.1, CC2.1",A.5.1,Organisational,owner to write
+C34,Risk assessment and register,CC3.1,A.5.7,Organisational,owner to write
+C35,"Staff screening, training, access reviews",CC1.4,"A.6.1, A.6.3, A.5.18",Organisational,owner to write
+C36,Incident response and notification process,"CC7.3, CC7.4","A.5.24, A.5.26",Partial (basics in RUNBOOK),RUNBOOK.md
+C37,Vendor and source licence management,CC9.2,"A.5.19, A.5.20",Partial,licence confirmations open
+C38,Business continuity plan and exercises,A1.3,"A.5.29, A.5.30",Organisational,owner to write
+C39,Physical and environmental security,CC6.4,A.7,Organisational,client infrastructure
+C40,Change management with approvals,CC8.1,A.8.32,Partial,repository history and CI
