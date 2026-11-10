@@ -28,6 +28,11 @@ export function Documents({ can }: { can: (p: string) => boolean }): ReactNode {
   return (
     <>
       <PageHead title="Documents">Reports, scans and files become evidence. Each one is stored unchanged, read with deterministic tools, and keeps its page-by-page record of how the text was obtained. No model reads or rewrites the content.</PageHead>
+      <Async state={cfg}>{c => <>
+        {c.scan.infected > 0 ? <div className="note err" role="alert"><strong>{c.scan.infected} file{c.scan.infected === 1 ? " was" : "s were"} flagged by the malware scanner.</strong> Flagged files are recorded but not opened, searched or downloadable, and their contents are not kept. They are listed below.</div> : null}
+        {c.scanner.configured && !c.scanner.reachable ? <div className="note err" role="alert">The malware scanner is not answering. New uploads are held, unopened, and retried until it is back.</div> : null}
+        {!c.scanner.configured ? <div className="note" role="status">No malware scanner is connected to this deployment, so uploaded files are not scanned. Institution documents cannot be uploaded until one is.</div> : <div className="small muted" style={{ marginBottom: 8 }}>Malware scanner: {c.scanner.engine} · {c.scanner.reachable ? c.scanner.version : "not answering"}.{c.scan.pending + c.scan.error > 0 ? ` ${c.scan.pending + c.scan.error} waiting for a scan.` : ""}</div>}
+      </>}</Async>
       {can("document.upload") ? <Async state={cfg}>{c => <UploadForm cfg={c} onDone={list.reload} />}</Async> : <div className="note">Your role can read documents but not add them.</div>}
       <form className="row" style={{ margin: "18px 0 14px" }} onSubmit={e => { e.preventDefault(); setTerm(q.trim()); }}>
         <label>Search inside documents<input type="search" minLength={2} value={q} onChange={e => setQ(e.target.value)} placeholder="Kuwait, برنت, reserves…" dir="auto" /></label><button style={{ alignSelf: "flex-end" }}>Search</button>
@@ -40,7 +45,7 @@ export function Documents({ can }: { can: (p: string) => boolean }): ReactNode {
         <Card title="All documents">
           <Async state={list} empty={d => d.length === 0}>{rows => (
             <Table label="Documents"><thead><tr><th>Document</th><th>Class</th><th>Status</th><th className="num">Pages</th><th>Text from</th><th>Added</th></tr></thead>
-              <tbody>{rows.map(d => <tr key={d.id}><td><a href={`#/documents/${d.id}`}>{d.title}</a><div className="small muted">{d.filename} · {kb(d.size_bytes)}</div></td><td><DataClass value={d.data_class} /></td><td><DocState v={d.status} />{d.error ? <div className="small muted" style={{ maxWidth: "34ch" }}>{d.error}</div> : null}</td>
+              <tbody>{rows.map(d => <tr key={d.id}><td><a href={`#/documents/${d.id}`}>{d.title}</a><div className="small muted">{d.filename} · {kb(d.size_bytes)}</div></td><td><DataClass value={d.data_class} /></td><td><DocState v={d.status} />{d.scan_status === "pending" || d.scan_status === "error" ? <div className="small muted">Waiting for a malware scan{d.scan_attempts > 0 ? ` (tried ${d.scan_attempts}×)` : ""}</div> : null}{d.scan_status === "infected" ? <div><span className="badge b-bad">Malware flagged</span></div> : null}{d.error ? <div className="small muted" style={{ maxWidth: "34ch" }}>{d.error}</div> : null}</td>
                 <td className="num">{d.page_count ?? "—"}</td><td>{d.status === "ready" || d.status === "quarantined" ? (d.ocr_used ? <>OCR{d.avg_confidence !== null ? <span className="small muted"> · {num(d.avg_confidence, 0)}% confidence</span> : null}</> : "Text layer") : "—"}</td><td>{dateTime(d.created_at)}</td></tr>)}</tbody></Table>
           )}</Async>
         </Card>
@@ -100,14 +105,17 @@ export function DocumentDetail({ id, can }: { id: string; can: (p: string) => bo
         <div className="grid">
           <Card title={x.title} aside={<span className="row"><DocState v={x.status} /><DataClass value={x.data_class} /></span>}>
             {x.error ? <div className="note err" role="alert">{x.error}{can("document.upload") ? <> <button className="link" onClick={() => void retry()}>Try again</button></> : null}</div> : null}
-            {x.status === "quarantined" ? <div className="note err" role="alert">This document failed validation and is held out of every calculation. Open its evidence record to see why.</div> : null}
+            {x.scan_status === "infected" ? <div className="note err" role="alert">The malware scanner flagged this file ({x.scan_signature}). It was not opened, its contents were not kept, and it cannot be downloaded. Nothing in the system can release it.</div> : null}
+            {x.scan_status === "pending" || x.scan_status === "error" ? <div className="note" role="status">Waiting for a malware scan{x.scan_error ? `: ${x.scan_error}` : ""}. The file stays unopened until a scan passes.</div> : null}
+            {x.status === "quarantined" && x.scan_status !== "infected" ? <div className="note err" role="alert">This document failed validation and is held out of every calculation. Open its evidence record to see why.</div> : null}
             <dl className="prov">
               <div><dt>File</dt><dd>{x.filename}</dd><dd className="muted">{x.mime} · {kb(x.size_bytes)}</dd><dd className="mono muted">sha256 {x.sha256.slice(0, 20)}…</dd></div>
               <div><dt>Origin</dt><dd>{x.original_agency ?? "Not stated"}</dd><dd>{x.source_url ? <a href={x.source_url} target="_blank" rel="noreferrer noopener">Original source</a> : "No web address"}</dd><dd className="muted">Added by {x.uploaded_by_name ?? "—"} · {dateTime(x.created_at)}</dd></div>
               <div><dt>Rights, as declared</dt><dd dir="auto">{x.rights_statement}</dd><dd><span className="badge b-warn">Not verified by TIGERIS</span></dd></div>
               <div><dt>Content</dt><dd>{x.page_count ?? "—"} page(s)</dd><dd>Language: {x.language ? LANGS[x.language] : "—"}</dd><dd>{x.ocr_used ? "Some or all text from OCR" : x.status === "ready" ? "No OCR used" : ""}</dd></div>
+              <div><dt>Malware scan</dt><dd>{({ clean: "Clean", infected: "Flagged", pending: "Waiting", error: "Waiting (scanner did not answer)", not_scanned: "Not scanned" } as const)[x.scan_status]}</dd><dd className="muted">{x.scan_engine ?? ""}</dd></div>
               <div><dt>Evidence</dt><dd>{x.evidence_id ? <><a href={`#/evidence/${x.evidence_id}`}>Open the evidence record</a><div className="small muted">Provenance, validation and case attachment work as for any evidence.</div></> : "Created when reading finishes"}</dd></div>
-              <div><dt>Original</dt><dd>{x.status === "ready" || x.status === "quarantined" ? <DownloadLink id={x.id} name={x.filename} /> : "—"}</dd><dd className="small muted">Each download is recorded in the audit trail.</dd></div>
+              <div><dt>Original</dt><dd>{(x.scan_status === "clean" || x.scan_status === "not_scanned") && (x.status === "ready" || x.status === "quarantined") ? <DownloadLink id={x.id} name={x.filename} /> : "—"}</dd><dd className="small muted">Each download is recorded in the audit trail.</dd></div>
             </dl>
           </Card>
           {x.pages.length ? (

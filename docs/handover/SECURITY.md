@@ -11,7 +11,7 @@ _Confidential. Property of Tiger Capital AI. Prepared for Tiger Capital AI and t
 | Cross-institution data exposure | Forced row-level security on every institution table; runtime role owns nothing and has no BYPASSRLS; start-up check; one deployment per institution |
 | Tampering with records | Immutability triggers on evidence, decisions, policy decisions, case history, memory, settings, exports; per-institution hash-chained audit written in the same transaction; no DELETE or TRUNCATE rights |
 | Injection | Parameterised queries (a concatenated case update was found and fixed); input validation with zod; strict content security policy |
-| Hostile uploads | Content sniffing, size and page limits, zip-bomb guard, child process with no shell and a clean environment. No malware scanning (gap) |
+| Hostile uploads | Content sniffing, size and page limits, zip-bomb guard, child process with no shell and a clean environment. Uploads are scanned by ClamAV before anything is stored; flagged files are recorded without their bytes and can never be opened or downloaded; if no verdict can be had the file is held unopened and retried (fail closed) |
 | Data leaving the system | Egress deny-by-default with a per-connector allowlist; TLS verification never disabled; no execution stack; actions only as human-owned handoffs |
 | Abuse and denial | Rate limits in the proxy and the API; per-route body limits |
 | Information leakage | Generic server errors with a request id; log redaction; metrics behind a separate token and hidden from outside |
@@ -31,14 +31,14 @@ Prompt injection in a stored fact cannot cause an action, because the model can 
 
 ## Known gaps
 
-These are the same gaps as the second half of [VERIFICATION-REPORT.md](VERIFICATION-REPORT.md): images never built; CI never run; no real identity provider; no independent penetration test; no malware scanning; Arabic OCR unmeasured; no high availability; backup scripts proved on the Debian layout only; no operating-system package inventory; Tiger's values not validated for truth; approximate facility positions; client data never connected.
+These are the same gaps as the second half of [VERIFICATION-REPORT.md](VERIFICATION-REPORT.md): images never built; CI never run; no real identity provider; no independent penetration test; malware scanning proved only with a test signature; Arabic OCR unmeasured; no high availability; backup scripts proved on the Debian layout only; no operating-system package inventory; Tiger's values not validated for truth; approximate facility positions; client data never connected.
 
 ## Before client data
 
 Decision 11 and the client's review require all of these before institution data or documents are enabled:
 
 1. Independent penetration test, with findings fixed or accepted in writing.
-2. Malware scanning in front of uploads.
+2. The malware scanner running with its real signature database in the client's environment (`TIGERIS_SCANNER=clamav`), with its update path confirmed.
 3. Identity provider checks: multi-factor claim, token endpoint cross-origin permission, redirect addresses, key rotation.
 4. Image build and CI run, and review of the image inventory.
 5. Backup drill in the client's environment, with the result recorded.

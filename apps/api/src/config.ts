@@ -7,6 +7,7 @@ export interface Config {
   oidc: { issuer: string; audience: string; jwksUri: string; requireMfa: boolean };
   reasoning: { provider: "off" | "anthropic" | "openai_compatible" | "local_extractive"; model: string; baseUrl: string; apiKey: string | null };
   scheduler: { enabled: boolean; tickSeconds: number };
+  scanner: { kind: "off" | "clamav" | "stub"; host: string; port: number; socket: string };
   clientDataEnabled: boolean; metricsToken: string | null; trustProxy: boolean; logLevel: string; rateLimit: { max: number; timeWindow: string } | null;
 }
 
@@ -36,6 +37,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     else if (!baseUrl) problems.push("TIGERIS_MODEL_BASE_URL is required for an OpenAI-compatible provider");
     if (baseUrl && production && !baseUrl.startsWith("https://")) problems.push("TIGERIS_MODEL_BASE_URL must use https in production");
   }
+  const kind = env.TIGERIS_SCANNER ?? "off", clamHost = env.TIGERIS_CLAMAV_HOST ?? "", clamPort = Number(env.TIGERIS_CLAMAV_PORT ?? 3310), clamSocket = env.TIGERIS_CLAMAV_SOCKET ?? "";
+  if (!["off", "clamav", "stub"].includes(kind)) problems.push("TIGERIS_SCANNER must be off, clamav or stub");
+  if (kind === "clamav" && !clamSocket && (!clamHost || !Number.isInteger(clamPort) || clamPort < 1 || clamPort > 65535)) problems.push("TIGERIS_SCANNER=clamav needs TIGERIS_CLAMAV_HOST and TIGERIS_CLAMAV_PORT, or TIGERIS_CLAMAV_SOCKET");
+  if (production && kind === "stub") problems.push("TIGERIS_SCANNER=stub is not protection and is refused in production");
+  if (env.TIGERIS_CLIENT_DATA_ENABLED === "true" && kind !== "clamav") problems.push("institution documents need a real malware scanner: set TIGERIS_SCANNER=clamav (decision 11)");
   const tick = Number(env.TIGERIS_SCHEDULER_TICK_SECONDS ?? 60);
   if (!Number.isFinite(tick) || tick < 10 || tick > 3600) problems.push("TIGERIS_SCHEDULER_TICK_SECONDS must be between 10 and 3600");
   const max = Number(env.RATE_LIMIT_PER_MINUTE ?? 600);
@@ -43,6 +49,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   if (problems.length) throw new Error(`configuration refused:\n - ${problems.join("\n - ")}`);
   return {
     production, databaseUrl, institutionId, port: Number(env.PORT ?? 3000), host: env.HOST ?? "127.0.0.1", oidc: { issuer, audience, jwksUri, requireMfa },
+    scanner: { kind: kind as Config["scanner"]["kind"], host: clamHost, port: clamPort, socket: clamSocket },
     scheduler: { enabled: env.TIGERIS_SCHEDULER_ENABLED === "true", tickSeconds: tick },
     reasoning: { provider: provider as Config["reasoning"]["provider"], model, baseUrl, apiKey },
     clientDataEnabled: env.TIGERIS_CLIENT_DATA_ENABLED === "true", metricsToken: env.METRICS_TOKEN || null, trustProxy: env.TIGERIS_TRUST_PROXY === "true", logLevel: env.LOG_LEVEL ?? "info",

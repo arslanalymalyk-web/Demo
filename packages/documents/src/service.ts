@@ -6,13 +6,14 @@ import { runIngestion } from "../../ingest/src/pipeline.js";
 import { audit, withTenant } from "../../ingest/src/store.js";
 import { extract } from "./extract.js";
 import { IntakeError, sniff } from "./sniff.js";
+import { ScannerUnavailable, scanBackoffMs, type Scanner, type Verdict } from "./scan.js";
 import { tools } from "./tools.js";
 
 export type DocDataClass = "public_record" | "institution_own" | "sample_dataset";
 export const DOC_CLASSES: DocDataClass[] = ["public_record", "institution_own", "sample_dataset"];
 const LABEL: Record<DocDataClass, string> = { public_record: "public records", institution_own: "institution documents", sample_dataset: "sample dataset" };
 
-export interface SubmitInput { buffer: Buffer; filename: string; title?: string; dataClass: DocDataClass; originalAgency?: string; sourceUrl?: string; rights: string; languages?: string; clientDataEnabled: boolean }
+export interface SubmitInput { buffer: Buffer; filename: string; title?: string; dataClass: DocDataClass; originalAgency?: string; sourceUrl?: string; rights: string; languages?: string; clientDataEnabled: boolean; scan?: { configured: boolean; engine: string | null; verdict: Verdict | null } }
 
 /** One approved upload source per data class, so each document's evidence inherits an honest class. */
 async function uploadSource(c: pg.PoolClient, inst: string, cls: DocDataClass): Promise<string> {
@@ -24,27 +25,59 @@ async function uploadSource(c: pg.PoolClient, inst: string, cls: DocDataClass): 
   return key;
 }
 
-export async function submitDocument(c: pg.PoolClient, inst: string, actorId: string, i: SubmitInput): Promise<{ id: string; status: string; duplicate: boolean }> {
+export async function submitDocument(c: pg.PoolClient, inst: string, actorId: string, i: SubmitInput): Promise<{ id: string; status: string; duplicate: boolean; scanStatus: string }> {
   const s = sniff(i.buffer);
   if (!DOC_CLASSES.includes(i.dataClass)) throw new IntakeError("choose a data class: public record, institution document or sample dataset", "invalid");
   if (i.dataClass === "institution_own" && !i.clientDataEnabled) throw new IntakeError("institution documents are not enabled on this deployment. Public sources only until the NDA and a data processing agreement are in place.", "forbidden");
   if (i.rights.trim().length < 3) throw new IntakeError("state the rights under which this document may be used", "invalid");
   if (i.dataClass === "public_record" && !i.originalAgency?.trim()) throw new IntakeError("a public record must name the agency that published it", "invalid");
+  const scan = i.scan ?? { configured: false, engine: null, verdict: null };
+  if (i.dataClass === "institution_own" && !scan.configured) throw new IntakeError("institution documents need a malware scanner, and none is configured on this deployment", "forbidden");
   const sha = createHash("sha256").update(i.buffer).digest("hex");
-  const dup = await c.query("SELECT id, status FROM documents WHERE sha256 = $1", [sha]);
-  if (dup.rows[0]) return { id: dup.rows[0].id, status: dup.rows[0].status, duplicate: true };
+  const dup = await c.query("SELECT id, status, scan_status FROM documents WHERE sha256 = $1", [sha]);
+  if (dup.rows[0]) return { id: dup.rows[0].id, status: dup.rows[0].status, duplicate: true, scanStatus: dup.rows[0].scan_status };
+  const infected = scan.verdict && !scan.verdict.clean ? scan.verdict.signature : null;
+  const scanStatus = infected ? "infected" : scan.verdict?.clean ? "clean" : scan.configured ? "pending" : "not_scanned";
   const name = i.filename.replace(/[\u0000-\u001f/\\]/g, "_").slice(0, 200) || `document.${s.ext}`;
   const r = await c.query(
-    `INSERT INTO documents (institution_id, title, filename, mime, size_bytes, sha256, data_class, original_agency, source_url, rights_statement, languages, uploaded_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7::data_class,$8,$9,$10,$11,$12) RETURNING id`,
-    [inst, (i.title?.trim() || name).slice(0, 300), name, s.mime, i.buffer.length, sha, i.dataClass, i.originalAgency?.trim() || null, i.sourceUrl?.trim() || null, i.rights.trim(), i.languages ?? "eng", actorId]);
-  await c.query("INSERT INTO document_files (institution_id, document_id, content) VALUES ($1,$2,$3)", [inst, r.rows[0].id, i.buffer]);
-  await audit(c, inst, { actorType: "principal", actorId, action: "document.uploaded", objectType: "document", objectId: r.rows[0].id, payload: { sha256: sha, mime: s.mime, bytes: i.buffer.length, dataClass: i.dataClass } });
-  return { id: r.rows[0].id, status: "queued", duplicate: false };
+    `INSERT INTO documents (institution_id, title, filename, mime, size_bytes, sha256, data_class, original_agency, source_url, rights_statement, languages, uploaded_by, status, scan_status, scan_engine, scan_signature, scanned_at, processed_at, error)
+     VALUES ($1,$2,$3,$4,$5,$6,$7::data_class,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING id`,
+    [inst, (i.title?.trim() || name).slice(0, 300), name, s.mime, i.buffer.length, sha, i.dataClass, i.originalAgency?.trim() || null, i.sourceUrl?.trim() || null, i.rights.trim(), i.languages ?? "eng", actorId,
+      infected ? "quarantined" : "queued", scanStatus, scan.verdict ? scan.engine : null, infected, scan.verdict ? new Date().toISOString() : null, infected ? new Date().toISOString() : null, infected ? `The malware scanner flagged this file (${infected}). It was not opened and cannot be downloaded.` : null]);
+  // A file the scanner flagged is recorded but its bytes are not kept.
+  if (!infected) await c.query("INSERT INTO document_files (institution_id, document_id, content) VALUES ($1,$2,$3)", [inst, r.rows[0].id, i.buffer]);
+  await audit(c, inst, { actorType: "principal", actorId, action: "document.uploaded", objectType: "document", objectId: r.rows[0].id, payload: { sha256: sha, mime: s.mime, bytes: i.buffer.length, dataClass: i.dataClass, scan: scanStatus } });
+  if (infected) await audit(c, inst, { actorType: "system", action: "document.malware_detected", objectType: "document", objectId: r.rows[0].id, payload: { sha256: sha, signature: infected, engine: scan.engine, uploadedBy: actorId } });
+  return { id: r.rows[0].id, status: infected ? "quarantined" : "queued", duplicate: false, scanStatus };
 }
 
 /** Extracts a stored document and records the result as evidence. Safe to call again for a document that failed. */
-export async function processDocument(pool: pg.Pool, inst: string, docId: string, now: () => Date = () => new Date()): Promise<string> {
+/** Decides whether a stored document may be opened. A file is processed only after a scanner has said it is clean; if no verdict can be had, it waits and is tried again. */
+async function scanGate(pool: pg.Pool, inst: string, docId: string, scanner: Scanner | null, now: () => Date): Promise<"go" | "skip" | "waiting" | "infected"> {
+  const d = await withTenant(pool, inst, async c => (await c.query("SELECT d.status, d.scan_status, d.scan_attempts, d.data_class, f.content FROM documents d JOIN document_files f ON f.document_id = d.id WHERE d.id = $1", [docId])).rows[0] as { status: string; scan_status: string; scan_attempts: number; data_class: string; content: Buffer } | undefined);
+  if (!d) throw new Error("document not found");
+  if (d.status !== "queued" && d.status !== "processing") return "skip";
+  if (d.scan_status === "clean" || (d.scan_status === "not_scanned" && d.data_class !== "institution_own")) return "go";
+  const defer = (why: string) => withTenant(pool, inst, async c => {
+    const n = d.scan_attempts + 1;
+    await c.query("UPDATE documents SET scan_status = 'error', scan_attempts = $2, scan_next_at = $3, scan_error = $4 WHERE id = $1", [docId, n, new Date(now().getTime() + scanBackoffMs(n)).toISOString(), why]);
+    if (n === 1) await audit(c, inst, { actorType: "system", action: "document.scan_deferred", objectType: "document", objectId: docId, payload: { reason: why } });
+    return "waiting" as const;
+  });
+  if (!scanner) return defer("no malware scanner is configured, so the file is held");
+  let v: Verdict;
+  try { v = await scanner.scan(d.content); } catch (e) { return defer(e instanceof ScannerUnavailable ? e.message : "the scan could not be completed"); }
+  return withTenant(pool, inst, async c => {
+    if (v.clean) { await c.query("UPDATE documents SET scan_status = 'clean', scan_engine = $2, scanned_at = now(), scan_error = NULL, scan_next_at = NULL WHERE id = $1", [docId, scanner.engine]); await audit(c, inst, { actorType: "system", action: "document.scanned", objectType: "document", objectId: docId, payload: { engine: scanner.engine, verdict: "clean" } }); return "go" as const; }
+    await c.query("UPDATE documents SET status = 'quarantined', scan_status = 'infected', scan_engine = $2, scan_signature = $3, scanned_at = now(), processed_at = now(), scan_error = NULL, scan_next_at = NULL, error = $4 WHERE id = $1", [docId, scanner.engine, v.signature, `The malware scanner flagged this file (${v.signature}). It was not opened and cannot be downloaded.`]);
+    await audit(c, inst, { actorType: "system", action: "document.malware_detected", objectType: "document", objectId: docId, payload: { signature: v.signature, engine: scanner.engine } });
+    return "infected" as const;
+  });
+}
+
+export async function processDocument(pool: pg.Pool, inst: string, docId: string, now: () => Date = () => new Date(), scanner: Scanner | null = null): Promise<string> {
+  const gate = await scanGate(pool, inst, docId, scanner, now);
+  if (gate !== "go") return gate === "skip" ? "skipped" : gate;
   const loaded = await withTenant(pool, inst, async c => {
     const r = await c.query("SELECT d.*, f.content FROM documents d JOIN document_files f ON f.document_id = d.id WHERE d.id = $1 FOR UPDATE OF d", [docId]);
     const d = r.rows[0];
@@ -88,17 +121,27 @@ export async function processDocument(pool: pg.Pool, inst: string, docId: string
 export class DocumentQueue {
   private chain: Promise<unknown> = Promise.resolve();
   private pending = 0;
-  constructor(private pool: pg.Pool, private inst: string, private now: () => Date = () => new Date()) {}
+  private inflight = new Set<string>();
+  private timer: NodeJS.Timeout | null = null;
+  constructor(private pool: pg.Pool, private inst: string, private now: () => Date = () => new Date(), readonly scanner: Scanner | null = null) {}
   enqueue(docId: string): void {
-    this.pending++;
-    this.chain = this.chain.then(() => processDocument(this.pool, this.inst, docId, this.now)).catch(() => undefined).finally(() => { this.pending--; });
+    if (this.inflight.has(docId)) return;
+    this.inflight.add(docId); this.pending++;
+    this.chain = this.chain.then(() => processDocument(this.pool, this.inst, docId, this.now, this.scanner)).catch(() => undefined).finally(() => { this.pending--; this.inflight.delete(docId); });
   }
   async resume(): Promise<number> {
     const ids = await withTenant(this.pool, this.inst, async c => (await c.query("SELECT id FROM documents WHERE status IN ('queued','processing') ORDER BY created_at")).rows.map(r => r.id as string));
     for (const id of ids) this.enqueue(id);
     return ids.length;
   }
-  async idle(): Promise<void> { await this.chain; }
+  /** Tries again, with back-off, every document that is waiting for a scan. */
+  async retryWaiting(): Promise<number> {
+    const ids = await withTenant(this.pool, this.inst, async c => (await c.query("SELECT id FROM documents WHERE status = 'queued' AND scan_status IN ('pending','error') AND (scan_next_at IS NULL OR scan_next_at <= $1) ORDER BY created_at LIMIT 50", [this.now().toISOString()])).rows.map(r => r.id as string));
+    for (const id of ids) this.enqueue(id);
+    return ids.length;
+  }
+  startRetrying(everyMs = 30_000): void { if (!this.timer) { this.timer = setInterval(() => { void this.retryWaiting().catch(() => undefined); }, everyMs); this.timer.unref(); } }
+  async idle(): Promise<void> { if (this.timer) { clearInterval(this.timer); this.timer = null; } await this.chain; }
   get busy(): boolean { return this.pending > 0; }
 }
 
@@ -108,7 +151,7 @@ export async function retryDocument(c: pg.PoolClient, inst: string, actorId: str
   await audit(c, inst, { actorType: "principal", actorId, action: "document.retried", objectType: "document", objectId: docId, payload: {} });
 }
 
-const COLS = "id, title, filename, mime, size_bytes, sha256, data_class, original_agency, source_url, rights_statement, languages, status, error, page_count, language, ocr_used, avg_confidence, evidence_id, uploaded_by, created_at, processed_at";
+const COLS = "scan_status, scan_engine, scan_signature, scanned_at, scan_attempts, scan_next_at, scan_error, id, title, filename, mime, size_bytes, sha256, data_class, original_agency, source_url, rights_statement, languages, status, error, page_count, language, ocr_used, avg_confidence, evidence_id, uploaded_by, created_at, processed_at";
 export async function listDocuments(c: pg.PoolClient): Promise<unknown[]> { return (await c.query(`SELECT ${COLS} FROM documents ORDER BY created_at DESC LIMIT 200`)).rows; }
 export async function getDocument(c: pg.PoolClient, id: string): Promise<unknown | null> {
   const d = (await c.query(`SELECT ${COLS} FROM documents WHERE id = $1`, [id])).rows[0];
@@ -131,8 +174,18 @@ export async function searchDocuments(c: pg.PoolClient, q: string): Promise<unkn
 }
 /** The original file, for download. Every download is written to the audit trail. */
 export async function downloadDocument(c: pg.PoolClient, inst: string, actorId: string, id: string): Promise<{ content: Buffer; mime: string; filename: string } | null> {
-  const r = (await c.query("SELECT d.mime, d.filename, f.content FROM documents d JOIN document_files f ON f.document_id = d.id WHERE d.id = $1", [id])).rows[0];
+  const r = (await c.query("SELECT d.mime, d.filename, d.scan_status, f.content FROM documents d LEFT JOIN document_files f ON f.document_id = d.id WHERE d.id = $1", [id])).rows[0];
   if (!r) return null;
+  if (r.scan_status === "infected") throw new IntakeError("this file was flagged by the malware scanner and cannot be downloaded", "forbidden");
+  if (r.scan_status === "pending" || r.scan_status === "error") throw new IntakeError("this file is waiting for a malware scan and cannot be downloaded yet", "forbidden");
+  if (!r.content) return null;
   await audit(c, inst, { actorType: "principal", actorId, action: "document.downloaded", objectType: "document", objectId: id, payload: {} });
   return { content: r.content, mime: r.mime, filename: r.filename };
+}
+
+/** How many documents are in each scan state, for the Documents screen and the metrics. */
+export async function scanSummary(c: pg.PoolClient): Promise<Record<string, number>> {
+  const out: Record<string, number> = { pending: 0, clean: 0, infected: 0, error: 0, not_scanned: 0 };
+  for (const r of (await c.query("SELECT scan_status, count(*)::int AS n FROM documents GROUP BY scan_status")).rows) out[r.scan_status as string] = r.n;
+  return out;
 }

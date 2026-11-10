@@ -29,7 +29,7 @@ This is a self-assessment of the build against SOC 2 (Trust Services Criteria) f
 | C21 | Ten-year retention, holds, exports | C1.2, PI1.5 | A.5.33, A.8.10 | Implemented | `packages/retention` |
 | C22 | Input validation and parameterised SQL | CC6.6, PI1.2 | A.8.28 | Implemented | tests; defect fixed |
 | C23 | Upload safety limits | CC6.8 | A.8.7 | Partial | `packages/documents` |
-| C24 | Malware scanning of uploads | CC6.8 | A.8.7 | Gap | VERIFICATION-REPORT item 5 |
+| C24 | Malware scanning of uploads, fail closed | CC6.8 | A.8.7 | Partial (proved with a test signature only) | `packages/documents/src/scan.ts`, `tests/malware.test.ts` |
 | C25 | Dependency audit, licence check | CC7.1, CC9.2 | A.8.8, A.5.21 | Implemented | `pnpm audit`, `sbom:check` |
 | C26 | Software bill of materials | CC9.2 | A.5.21 | Partial (npm packages only) | `docs/handover/sbom` |
 | C27 | Offline install bundle | CC8.1 | A.8.19 | Implemented | bundle drill |

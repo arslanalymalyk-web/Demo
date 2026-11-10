@@ -57,6 +57,10 @@ Production start-up refuses weak or missing configuration and lists every proble
 6. Start the backup service and run the restore drill in [BACKUP-RESTORE.md](BACKUP-RESTORE.md) before go-live.
 7. Review the image inventory produced by CI and the SBOM in `docs/handover/sbom`.
 
+## Malware scanner
+
+Start the scanner with `docker compose --profile scanner up -d` and set `TIGERIS_SCANNER=clamav` (host `clamav`, port 3310 by default). The ClamAV container sits on the internal network and on the egress network so it can refresh signatures; restrict that egress to the ClamAV signature hosts and pin the image by digest. It is required before institution documents are enabled: configuration refuses client-data mode without it and start-up refuses to run if it does not answer. Not yet built or started in this build.
+
 ## Optional: scheduled ingestion
 
 Off by default. Set `TIGERIS_SCHEDULER_ENABLED=true`, add the egress network to the API service in the compose file, and allow exactly the source hosts on the network allowlist (the sources are listed on the Data and Sources screen; each connector reaches only its own source). Then two administrators activate a schedule under Settings, Ingestion schedule. With the scheduler on and no schedule active, nothing is fetched. The scheduler appears on `/metrics` as `tigeris_scheduler_enabled`. If the client prefers the API never to have outbound access, leave it off and use the separate ingest service or an external scheduler running the ingest command.
@@ -67,4 +71,4 @@ The Assistant is off by default and nothing is sent anywhere. To enable it, set 
 
 ## Before client data is connected
 
-Complete the items in [SECURITY.md](SECURITY.md) under "Before client data": independent penetration test, malware scanning of uploads, identity provider check, the backup drill in this environment, and the client's own review.
+Complete the items in [SECURITY.md](SECURITY.md) under "Before client data": independent penetration test, the malware scanner running with current signatures, identity provider check, the backup drill in this environment, and the client's own review.

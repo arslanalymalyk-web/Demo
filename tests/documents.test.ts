@@ -8,7 +8,7 @@ import { strToU8, zipSync } from "fflate";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildServer } from "../apps/api/src/server.js";
-import { DocumentQueue, IntakeError, detectLanguage, extract, sniff, tools } from "../packages/documents/src/index.js";
+import { DocumentQueue, IntakeError, detectLanguage, extract, sniff, stubScanner, tools } from "../packages/documents/src/index.js";
 import { withTenant } from "../packages/ingest/src/store.js";
 import { addUser, verifier } from "./helpers/auth.js";
 
@@ -126,8 +126,9 @@ suite("document intake against a real database and the API", () => {
     const id = randomUUID();
     await withTenant(owner, id, async c => { await c.query("INSERT INTO institutions (id, name) VALUES ($1,'Docs')", [id]); });
     const tokens = { ana: await addUser(owner, app, id, "ana", ["analyst"]), ed: await addUser(owner, app, id, "ed", ["executive"]), aud: await addUser(owner, app, id, "aud", ["auditor"]) };
-    const queue = new DocumentQueue(app, id, () => new Date("2026-11-10T00:00:00Z"));
-    const server = buildServer({ pool: app, institutionId: id, verifier: verifier(), documents: queue, clientDataEnabled: clientData });
+    const scanner = clientData ? stubScanner() : null; // institution documents need a scanner
+    const queue = new DocumentQueue(app, id, () => new Date("2026-11-10T00:00:00Z"), scanner);
+    const server = buildServer({ pool: app, institutionId: id, verifier: verifier(), documents: queue, clientDataEnabled: clientData, scanner });
     const call = async (who: keyof typeof tokens | null, method: string, url: string, payload?: Buffer | object, headers: Record<string, string> = {}) => {
       const r = await server.inject({ method: method as "GET", url, headers: { ...(who ? { authorization: `Bearer ${tokens[who]}` } : {}), ...headers }, ...(payload ? { payload: payload as never } : {}) });
       let body: any = null; try { body = r.json(); } catch { /* binary */ }

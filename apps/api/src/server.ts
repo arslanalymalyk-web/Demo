@@ -11,7 +11,7 @@ import { AuthError, IdentityError, findPrincipal, listPrincipals, permissionsOf,
 import { audit } from "../../../packages/ingest/src/store.js";
 import { CaseError, addEvidence, addParticipant, addRecommendation, openCaseFromSignal, addScenario, closeCase, createCase, decide, getCase, listCases, listHandoffs, searchMemory, startAnalysis, submitForReview, updateHandoff } from "../../../packages/cases/src/index.js";
 import { GovernanceError, activatePolicy, createPolicyDraft, listPolicies } from "../../../packages/governance/src/index.js";
-import { IntakeError, tools as docTools, downloadDocument, getDocument, getPage, listDocuments, retryDocument, searchDocuments, submitDocument, type DocumentQueue } from "../../../packages/documents/src/index.js";
+import { IntakeError, tools as docTools, downloadDocument, getDocument, getPage, listDocuments, retryDocument, searchDocuments, submitDocument, type DocumentQueue, type Scanner, type Verdict, scanSummary } from "../../../packages/documents/src/index.js";
 import { RetentionError, exportCase, holdFor, placeHold, releaseHold, retentionReport } from "../../../packages/retention/src/index.js";
 import { SCOPES, SCOPE_INFO, DEFAULT_SIGNAL_RULES, SettingsError, activate as activateSetting, activeOf, createDraft as createSettingDraft, effectiveScenarioDefaults, effectiveSchedule, effectiveThresholds, listVersions as listSettings, type Scope } from "../../../packages/settings/src/index.js";
 import { SECTORS, buildMap, buildSector, composeBriefing, isPack, type BriefingCase, type BriefingRun } from "../../../packages/sectors/src/index.js";
@@ -116,7 +116,7 @@ declare module "fastify" { interface FastifyRequest { principal?: Principal } }
  * The institution is fixed by deployment configuration (one deployment per institution).
  * Every route except /health needs a bearer token from the institution's identity provider and a provisioned, active principal with the right role.
  */
-export interface ServerOptions { pool: pg.Pool; institutionId: string; verifier: TokenVerifier; documents?: DocumentQueue; clientDataEnabled?: boolean; logger?: FastifyServerOptions["logger"]; rateLimit?: { max: number; timeWindow: string } | null; metricsToken?: string | null; trustProxy?: boolean; reasoning?: { adapter: ModelAdapter; perHour?: number } | null; scheduler?: Scheduler | null }
+export interface ServerOptions { pool: pg.Pool; institutionId: string; verifier: TokenVerifier; documents?: DocumentQueue; clientDataEnabled?: boolean; logger?: FastifyServerOptions["logger"]; rateLimit?: { max: number; timeWindow: string } | null; metricsToken?: string | null; trustProxy?: boolean; reasoning?: { adapter: ModelAdapter; perHour?: number } | null; scheduler?: Scheduler | null; scanner?: Scanner | null }
 
 export function buildServer(opts: ServerOptions): FastifyInstance {
   const app = Fastify({
@@ -138,6 +138,15 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   new Gauge({ name: "tigeris_source_last_success_age_hours", help: "Hours since the last completed fetch of a scheduled source", labelNames: ["source"], registers: [registry], async collect() { this.reset(); for (const r of (await healthNow().catch(() => [])).filter(x => x.scheduled && x.lastSuccessAgeHours !== null)) this.set({ source: r.sourceKey }, r.lastSuccessAgeHours!); } });
   new Gauge({ name: "tigeris_ingest_jobs_24h", help: "Ingestion jobs started in the last 24 hours, by outcome", labelNames: ["status"], registers: [registry], async collect() { this.reset(); const rows = await withTenant(opts.pool, opts.institutionId, async c => (await c.query("SELECT status, count(*)::int AS n FROM ingestion_jobs WHERE started_at > now() - interval '24 hours' GROUP BY status")).rows).catch(() => []); for (const s of ["completed", "failed", "running"]) this.set({ status: s }, rows.find((r: { status: string; n: number }) => r.status === s)?.n ?? 0); } });
   new Gauge({ name: "tigeris_scheduler_enabled", help: "1 when scheduled ingestion is running in this process", registers: [registry], collect() { this.set(opts.scheduler ? 1 : 0); } });
+  // The scanner is pinged at most every 30 seconds, whoever asks.
+  let scanProbe: { at: number; up: boolean; version: string | null } | null = null;
+  const scannerState = async () => {
+    if (!opts.scanner) return { configured: false, engine: null as string | null, reachable: false, version: null as string | null };
+    if (!scanProbe || Date.now() - scanProbe.at > 30_000) { try { scanProbe = { at: Date.now(), up: true, version: await opts.scanner.ping() }; } catch { scanProbe = { at: Date.now(), up: false, version: null }; } }
+    return { configured: true, engine: opts.scanner.engine, reachable: scanProbe.up, version: scanProbe.version };
+  };
+  new Gauge({ name: "tigeris_scanner_up", help: "1 when the malware scanner answers, 0 when configured but not answering", registers: [registry], async collect() { const s = await scannerState(); this.set(s.configured && s.reachable ? 1 : 0); } });
+  new Gauge({ name: "tigeris_documents_by_scan", help: "Documents by malware-scan state", labelNames: ["status"], registers: [registry], async collect() { this.reset(); const s = await withTenant(opts.pool, opts.institutionId, c => scanSummary(c)).catch(() => ({} as Record<string, number>)); for (const [k, v] of Object.entries(s)) this.set({ status: k }, v); } });
   app.addHook("onRequest", async (req, reply) => { reply.header("x-request-id", req.id); });
   app.addHook("onSend", async (req, reply, payload) => {
     reply.header("x-content-type-options", "nosniff").header("x-frame-options", "DENY").header("referrer-policy", "no-referrer").header("cross-origin-resource-policy", "same-origin");
@@ -188,7 +197,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
 
   app.get("/health", async () => ({ status: "ok" }));
   // Readiness: can this instance serve a request that needs the database? Liveness above does not touch it.
-  app.get("/ready", async (_req, reply) => { try { await Promise.race([opts.pool.query("SELECT 1"), new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 3000))]); return { status: "ready" }; } catch { return reply.code(503).send({ status: "not_ready" }); } });
+  app.get("/ready", async (_req, reply) => { try { await Promise.race([opts.pool.query("SELECT 1"), new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 3000))]); return { status: "ready", scanner: (await scannerState().then(s => !s.configured ? "off" : s.reachable ? "up" : "down")) }; } catch { return reply.code(503).send({ status: "not_ready" }); } });
   // Metrics have their own bearer token, so they never depend on a person's identity. Without a token the endpoint does not exist.
   app.get("/metrics", async (req, reply) => {
     const tok = opts.metricsToken; if (!tok) return reply.code(404).send({ error: "not_found" });
@@ -376,9 +385,12 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
       if (!Buffer.isBuffer(req.body)) return reply.code(400).send({ error: "invalid_body", message: "send the file as the request body" });
       const h = req.headers;
       let queued: string | null = null;
+      // Scan before anything is stored. If the scanner cannot give a verdict now, the file is stored as waiting and is scanned again later; it is never treated as clean.
+      let verdict: Verdict | null = null;
+      if (opts.scanner) { try { verdict = await opts.scanner.scan(req.body); } catch { verdict = null; } }
       const out = await intake(req, reply, async c => {
-        const r = await submitDocument(c, opts.institutionId, req.principal!.id, { buffer: req.body as Buffer, filename: hdr(h["x-filename"]) || "document", title: hdr(h["x-title"]), dataClass: hdr(h["x-data-class"]) as never, originalAgency: hdr(h["x-original-agency"]), sourceUrl: hdr(h["x-source-url"]), rights: hdr(h["x-rights"]), languages: hdr(h["x-languages"]) || "eng", clientDataEnabled: opts.clientDataEnabled === true });
-        if (!r.duplicate) queued = r.id;
+        const r = await submitDocument(c, opts.institutionId, req.principal!.id, { buffer: req.body as Buffer, filename: hdr(h["x-filename"]) || "document", title: hdr(h["x-title"]), dataClass: hdr(h["x-data-class"]) as never, originalAgency: hdr(h["x-original-agency"]), sourceUrl: hdr(h["x-source-url"]), rights: hdr(h["x-rights"]), languages: hdr(h["x-languages"]) || "eng", clientDataEnabled: opts.clientDataEnabled === true , scan: { configured: !!opts.scanner, engine: opts.scanner?.engine ?? null, verdict }});
+        if (!r.duplicate && r.status === "queued") queued = r.id;
         return r;
       }, ((r: { duplicate: boolean }) => r.duplicate ? 200 : 202) as never);
       if (queued) opts.documents?.enqueue(queued);
@@ -494,13 +506,13 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   });
 
   app.get("/v1/documents", async () => tenant(c => listDocuments(c)));
-  app.get("/v1/documents/config", async () => { const t = await docTools(); return { clientDataEnabled: opts.clientDataEnabled === true, ocr: { available: t.tesseract !== null, languages: t.languages }, maxMegabytes: 20, maxPages: 100, accepted: ["PDF", "PNG", "JPEG", "TIFF", "Word (.docx)", "Plain text"] }; });
+  app.get("/v1/documents/config", async () => { const t = await docTools(); return { clientDataEnabled: opts.clientDataEnabled === true, ocr: { available: t.tesseract !== null, languages: t.languages }, scanner: await scannerState(), scan: await tenant(c => scanSummary(c)), maxMegabytes: 20, maxPages: 100, accepted: ["PDF", "PNG", "JPEG", "TIFF", "Word (.docx)", "Plain text"] }; });
   app.get("/v1/documents/search", async (req, reply) => { const q = z.object({ q: z.string().min(2).max(200) }).safeParse(req.query); return q.success ? tenant(c => searchDocuments(c, q.data.q)) : reply.code(400).send({ error: "invalid_query" }); });
   app.get("/v1/documents/:id", async (req, reply) => { const id = idOf(req); if (!id.success) return reply.code(400).send({ error: "invalid_id" }); return (await tenant(c => getDocument(c, id.data))) ?? reply.code(404).send({ error: "not_found" }); });
   app.get("/v1/documents/:id/pages/:n", async (req, reply) => { const id = idOf(req), n = z.coerce.number().int().min(1).max(1000).safeParse((req.params as { n: string }).n); if (!id.success || !n.success) return reply.code(400).send({ error: "invalid_request" }); return (await tenant(c => getPage(c, id.data, n.data))) ?? reply.code(404).send({ error: "not_found" }); });
   app.get("/v1/documents/:id/file", async (req, reply) => {
     const id = idOf(req); if (!id.success) return reply.code(400).send({ error: "invalid_id" });
-    const f = await tenant(c => downloadDocument(c, opts.institutionId, req.principal!.id, id.data));
+    let f; try { f = await tenant(c => downloadDocument(c, opts.institutionId, req.principal!.id, id.data)); } catch (e) { if (e instanceof IntakeError) return reply.code(403).send({ error: e.code, message: e.message }); throw e; }
     if (!f) return reply.code(404).send({ error: "not_found" });
     return reply.header("content-type", f.mime).header("content-disposition", `attachment; filename*=UTF-8''${encodeURIComponent(f.filename)}`).header("x-content-type-options", "nosniff").header("content-security-policy", "sandbox").send(f.content);
   });

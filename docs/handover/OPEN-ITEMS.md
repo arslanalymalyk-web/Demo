@@ -46,7 +46,7 @@ _Confidential. Property of Tiger Capital AI. Prepared for the named recipients o
 2. Run the CI workflow on GitHub.
 3. Run the backup drill in the client's environment and against the official PostgreSQL image.
 4. Commission the independent penetration test (decision 11).
-5. Add a malware scanner in front of uploads.
+5. Run the malware scanner with its real signature database in the client's environment and confirm signature updates (the hook is built and tested with a test signature only).
 6. A dedicated environment setup script for the development cloud environment: Tesseract and PostgreSQL were installed only in the working container and are not in the shared default environment.
 7. Decide whether high availability is needed beyond the first client.
 

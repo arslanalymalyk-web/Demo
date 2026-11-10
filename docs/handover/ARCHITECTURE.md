@@ -54,6 +54,10 @@ OIDC bearer tokens. The web app uses the authorization-code flow with PKCE and k
 
 Uploads are sniffed by content, size and page limited, and processed by Poppler and Tesseract through `execFile` with no shell, a clean environment and a temporary directory. An in-process queue resumes after restart. Institution documents are gated by `TIGERIS_CLIENT_DATA_ENABLED`, and production also needs `TIGERIS_CLIENT_DATA_REVIEW_DONE`.
 
+## Malware scanning
+
+Uploads are scanned before they are stored (`packages/documents/src/scan.ts`, ADR 0023). The ClamAV adapter streams the bytes to a daemon on the internal network with the INSTREAM protocol and accepts only an exact clean answer. A flagged file is recorded without its bytes and quarantined; a file with no verdict yet is stored as waiting, unopened, and retried with back-off. A trigger makes a scan verdict final. Institution documents need a configured scanner.
+
 ## Web
 
 Ivory design, navy theme, right-to-left aware. Runtime configuration comes from `/config.js` (`window.TIGERIS_CONFIG`), so one image serves any environment. The map uses pre-projected Natural Earth paths built by `scripts/build-geo.mjs`.

@@ -61,6 +61,10 @@ Logs are JSON with secrets redacted. Every response carries a request id; use it
 | Uploads rejected | Over size or page limit, unsafe type, or institution documents not enabled |
 | Rate limited (429) | Limit per address reached; check for a proxy that hides client addresses |
 
+## Malware scanner
+
+The Documents screen shows the scanner status, files waiting for a scan, and any flagged file. If the scanner stops answering, new uploads are held unopened and retried every few minutes (up to every 15), then processed when it returns; nothing is treated as clean. A flagged file stays quarantined for good: it is recorded with its signature, its bytes are not kept, and no one can release it. Keep signatures current (the ClamAV container refreshes them through its egress network); alert on `tigeris_scanner_up` at 0 and on `tigeris_documents_by_scan{status="infected"}` above 0.
+
 ## Assistant and model calls
 
 If drafts fail with "the model could not be reached", check the egress network, the allowlist and the key. Verification failures ("Failed verification") are expected sometimes and are not faults: the draft is discarded and the call is logged. Auditors read the call log in the Assistant screen. Per-person limit is 30 drafts an hour. To turn the Assistant off, set the provider to `off` and restart the API.

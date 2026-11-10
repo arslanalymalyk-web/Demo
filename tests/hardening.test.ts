@@ -35,8 +35,9 @@ describe("configuration", () => {
     expect(() => cfg({ ...prod, DATABASE_URL: "postgres://app:short@db/tigeris" })).toThrow(/short or a known weak/);
     expect(() => cfg({ ...prod, OIDC_REQUIRE_MFA_CLAIM: "false" })).toThrow(/recorded decision/);
     expect(cfg({ ...prod, OIDC_REQUIRE_MFA_CLAIM: "false", TIGERIS_ALLOW_NO_MFA_CLAIM: "true" }).oidc.requireMfa).toBe(false);
-    expect(() => cfg({ ...prod, TIGERIS_CLIENT_DATA_ENABLED: "true" })).toThrow(/security review/);
-    expect(cfg({ ...prod, TIGERIS_CLIENT_DATA_ENABLED: "true", TIGERIS_CLIENT_DATA_REVIEW_DONE: "true" }).clientDataEnabled).toBe(true);
+    expect(() => cfg({ ...prod, TIGERIS_CLIENT_DATA_ENABLED: "true", TIGERIS_SCANNER: "clamav", TIGERIS_CLAMAV_HOST: "scan" })).toThrow(/security review/);
+    expect(() => cfg({ ...prod, TIGERIS_CLIENT_DATA_ENABLED: "true", TIGERIS_CLIENT_DATA_REVIEW_DONE: "true" })).toThrow(/real malware scanner/);
+    expect(cfg({ ...prod, TIGERIS_CLIENT_DATA_ENABLED: "true", TIGERIS_CLIENT_DATA_REVIEW_DONE: "true", TIGERIS_SCANNER: "clamav", TIGERIS_CLAMAV_HOST: "scan" }).clientDataEnabled).toBe(true);
     expect(() => cfg({ ...prod, METRICS_TOKEN: "short" })).toThrow(/at least 24/);
   });
   it("reads secrets from mounted files, trimmed, and refuses ambiguity or a missing file", () => {
@@ -100,7 +101,7 @@ suite("runtime safety and the HTTP surface against a real database", () => {
   it("answers health without a database, and readiness only when the database answers", async () => {
     const s = await scene();
     expect((await s.call("/health")).json()).toEqual({ status: "ok" });
-    expect((await s.call("/ready")).json()).toEqual({ status: "ready" });
+    expect((await s.call("/ready")).json()).toEqual({ status: "ready", scanner: "off" });
     const dead = new pg.Pool({ connectionString: "postgres://x:y@127.0.0.1:1/none", connectionTimeoutMillis: 500 });
     const d = await scene({}, dead);
     expect((await d.call("/health")).statusCode).toBe(200);

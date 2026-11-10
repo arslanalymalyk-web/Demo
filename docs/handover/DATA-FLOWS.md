@@ -11,7 +11,7 @@ _Confidential. Property of Tiger Capital AI. Prepared for the client's IT and se
 | 3 | Person's browser | Identity provider | Authorization-code flow with PKCE | Client's provider; token kept in browser memory |
 | 4 | API | Identity provider (JWKS) | Public signing keys | https required in production |
 | 5 | API | PostgreSQL | All records | Internal network only; restricted role; forced row-level security |
-| 6 | Person's browser | API | Uploaded documents (only when institution documents are enabled) | Size, page and type limits; processed in a restricted child process; not malware scanned |
+| 6 | Person's browser | API | Uploaded documents (only when institution documents are enabled) | Size, page and type limits; scanned by ClamAV on the internal network before anything is stored; flagged files are recorded without their bytes; processed in a restricted child process |
 | 7 | API | Case exports (download) | Case record, audit events, integrity hash | Permission `export.run`; export itself recorded |
 | 8 | Database | Backup service | Base backups and write-ahead log | Encrypted before storage; key from the client's secret store |
 | 9 | Monitoring system | `/metrics` | Counters and timings, no record content | Separate bearer token; blocked at the proxy from outside |
