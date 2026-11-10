@@ -20,6 +20,7 @@ A TypeScript modular monolith (Node 22, pnpm workspace). One Fastify API (`apps/
 | `sectors` | Versioned signal rules over stored series; signal to case |
 | `settings` | Governed settings: draft, active, retired; two-person activation |
 | `retention` | Ten-year report, legal holds, case exports with integrity hash |
+| `setup` | First-run bootstrap (institution, roles, two administrators, policy, source registry), identity-provider and database checks, and the Readiness report (ADR 0024) |
 | `scheduler` | Scheduled ingestion with back-off and auto-pause, source health, cases for stale or failing sources (ADR 0022) |
 | `reasoning` | Model-agnostic drafting. A model proposes cited text from stored facts, fixed code verifies every figure and citation, every call is logged (ADR 0021) |
 

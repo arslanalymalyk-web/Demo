@@ -3,6 +3,7 @@
 import pg from "pg";
 import { PoliteHttp, type Connector } from "../packages/connectors/src/index.js";
 import type { RawRecord } from "../packages/core/src/index.js";
+import { ensureDefaultPolicy } from "../packages/governance/src/store.js";
 import { provisionPrincipal } from "../packages/identity/src/index.js";
 import { runIngestion } from "../packages/ingest/src/pipeline.js";
 import { withTenant } from "../packages/ingest/src/store.js";
@@ -36,6 +37,7 @@ await withTenant(owner, id, async c => {
 const issuer = `http://127.0.0.1:${process.env.DEV_IDP_PORT ?? 4011}`;
 for (const [sub, roles] of Object.entries(PEOPLE)) await withTenant(app, id, c => provisionPrincipal(c, id, { type: "system" }, { issuer, subject: sub, displayName: sub, roles }));
 
+await withTenant(app, id, c => ensureDefaultPolicy(c, id));
 const src = (series: string) => SOURCES.find(s => s[0] === series)![1];
 const ing = (series: string, rs: RawRecord[]) => runIngestion({ pool: app, institutionId: id, sourceKey: src(series), connector: { platform: "fake", async *fetchRecords() { for (const r of rs) yield r; } } as Connector, http: noNetwork });
 const m14 = months(14), q = quarters();

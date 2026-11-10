@@ -52,3 +52,4 @@ This is a self-assessment of the build against SOC 2 (Trust Services Criteria) f
 | C44 | Governed ingestion schedule, two-person activation | CC8.1, CC5.2 | A.8.32 | Implemented | `packages/settings`, `tests/scheduler.test.ts` |
 | C45 | Source health monitoring, back-off, auto-pause, steward cases | A1.1, CC7.1, CC7.2 | A.8.16 | Implemented (real run tried on one source only) | `packages/scheduler`, `tests/scheduler.test.ts` |
 | C46 | Audited run, pause and resume of scheduled sources | CC7.2 | A.8.15 | Implemented | audit events `scheduler.*` |
+| C47 | Repeatable first-run set-up, identity-provider checks, readiness report, two administrators required | CC8.1, CC5.2 | A.8.9, A.5.3 | Implemented (identity provider checks tested against fakes only) | `packages/setup`, `tests/setup.test.ts` |

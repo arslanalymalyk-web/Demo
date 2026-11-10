@@ -136,3 +136,6 @@ export interface SourceHealthRow {
   lastRuns: { id: string; status: string; trigger: string; startedAt: string; finishedAt: string | null; error: string | null; stats: Record<string, number> }[]; openCase: { id: string; caseKey: string } | null;
 }
 export interface SourceHealthView { asOf: string; scheduler: { enabled: boolean; running: boolean; tickSeconds: number | null; lastTickAt: string | null; scheduleVersion: number | null; steward: string | null; pauseAfterFailures: number }; sources: SourceHealthRow[] }
+
+export interface ReadinessCheck { id: string; title: string; status: "pass" | "warn" | "fail" | "manual"; detail: string; href?: string }
+export interface ReadinessView { ready: boolean; checks: ReadinessCheck[] }

@@ -51,11 +51,13 @@ Production start-up refuses weak or missing configuration and lists every proble
 
 1. Provision a host with the container runtime and enough disk for the database, base backups and log archive.
 2. Create the secret files and the TLS files. Copy the example environment files and fill them in.
-3. Start the database. Run migrations with the owner role (the migration job or `db/migrate.mjs` with `DATABASE_URL_OWNER_FILE`). Seed the institution and first administrator.
-4. Start the API and the proxy. Check `/health` and `/ready` through the proxy.
-5. Provision users and roles. Sign in with a test person.
-6. Start the backup service and run the restore drill in [BACKUP-RESTORE.md](BACKUP-RESTORE.md) before go-live.
-7. Review the image inventory produced by CI and the SBOM in `docs/handover/sbom`.
+3. Start the database and run the migrations (`docker compose up -d db migrate`).
+4. Check the database and the identity provider, read-only: `docker compose --profile setup run --rm setup check`. Fix every FAIL. Items marked CHECK need a person (multi-factor claim, redirect address, key rotation).
+5. Stand up the institution: `docker compose --profile setup run --rm setup apply --name "Client Fund" --jurisdiction SA --admin <subject>:"First Admin" --admin <subject>:"Second Admin" [--auditor <subject>:"Name"]`. Subjects are the identity provider's `sub` for each person. It creates the institution, the seven roles, the administrators (two are required, because settings and policy changes need one person to draft and another to approve), the default decision policy and the source registry, and prints `TIGERIS_INSTITUTION_ID`. Put that value in `.env`. It is safe to run again with `--institution-id`.
+6. Start the API and the proxy. Check `/health` and `/ready` through the proxy. Sign in as the first administrator and open Readiness: it lists what is still open.
+7. Confirm each source's licence and approve it, load the Gulf geography (`pnpm geography`), and have the second administrator activate the settings the institution decides.
+8. Start the backup service and run the restore drill in [BACKUP-RESTORE.md](BACKUP-RESTORE.md) before go-live.
+9. Review the image inventory produced by CI and the SBOM in `docs/handover/sbom`.
 
 ## Malware scanner
 

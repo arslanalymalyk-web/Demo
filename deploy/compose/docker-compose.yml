@@ -65,6 +65,26 @@ services:
     networks: [backend]
     depends_on: { db: { condition: service_healthy } }
 
+  # First-run set-up, once per deployment: docker compose --profile setup run --rm setup check|apply ...
+  # It needs the migrations applied and no TIGERIS_INSTITUTION_ID yet; it prints the id to put in .env.
+  setup:
+    profiles: ["setup"]
+    build: { context: ../.., dockerfile: Dockerfile, target: app }
+    restart: "no"
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    environment:
+      DATABASE_URL_OWNER_FILE: /run/secrets/db_owner_url
+      DATABASE_URL_FILE: /run/secrets/db_app_url
+      OIDC_ISSUER: ${OIDC_ISSUER:?}
+      OIDC_JWKS_URI: ${OIDC_JWKS_URI:-}
+      WEB_ORIGIN: https://${SERVER_NAME:-localhost}
+      TIGERIS_ENV: production
+    secrets: [db_owner_url, db_app_url]
+    entrypoint: ["node", "--import", "tsx", "packages/setup/src/cli.ts"]
+    networks: [backend, idp]
+    depends_on: { migrate: { condition: service_completed_successfully } }
+
   app:
     <<: *hardening
     build: { context: ../.., dockerfile: Dockerfile, target: app }

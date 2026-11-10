@@ -2,6 +2,10 @@
 
 _Confidential. Property of Tiger Capital AI. Prepared for operators._
 
+## Readiness
+
+The Readiness screen (administrators and auditors) lists what is still open for real use: two administrators, an auditor, the decision policy, approved sources, stored records, which settings are still on code defaults, the map geography, the audit chain and the scanner. "Blocks use" must be cleared; "Needs a decision" is for the institution; "Confirm by hand" covers the restore drill, the penetration test and the multi-factor claim. Check it after every change to the configuration.
+
 ## Daily checks
 
 - `/health` returns ok and `/ready` returns ready (database reachable, migrations current).

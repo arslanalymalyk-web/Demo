@@ -6,7 +6,7 @@ if (!process.env.DATABASE_URL_OWNER && process.env.DATABASE_URL_OWNER_FILE) proc
 import pg from "pg";
 const client = new pg.Client({ connectionString: process.env.DATABASE_URL_OWNER });
 await client.connect();
-const id = randomUUID();
+const id = process.env.TIGERIS_INSTITUTION_ID || randomUUID(); // row-level security hides other institutions, so a repeat run must be given the id it created
 await client.query("BEGIN");
 await client.query("SELECT set_config('app.institution_id', $1, true)", [id]);
 const existing = await client.query("SELECT id FROM institutions LIMIT 1");

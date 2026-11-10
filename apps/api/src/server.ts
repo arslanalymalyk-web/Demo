@@ -17,6 +17,7 @@ import { SCOPES, SCOPE_INFO, DEFAULT_SIGNAL_RULES, SettingsError, activate as ac
 import { SECTORS, buildMap, buildSector, composeBriefing, isPack, type BriefingCase, type BriefingRun } from "../../../packages/sectors/src/index.js";
 import { connectorFor } from "../../../packages/connectors/src/index.js";
 import { ReasoningError, listCalls, runReasoning, type ModelAdapter } from "../../../packages/reasoning/src/index.js";
+import { installationReadiness } from "../../../packages/setup/src/index.js";
 import { SchedulerError, pauseSource, requestRun, resumeSource, sourceHealth, type Scheduler } from "../../../packages/scheduler/src/index.js";
 import { getLineage, verifyAuditChain } from "../../../packages/ingest/src/lineage.js";
 import { withTenant } from "../../../packages/ingest/src/store.js";
@@ -78,6 +79,7 @@ const ACCESS: Record<string, Permission | null | "public"> = {
   "GET /v1/sectors": "series.read",
   "GET /v1/sectors/:pack": "series.read",
   "GET /v1/briefings/:pack": "series.read",
+  "GET /v1/readiness": "identity.read",
   "GET /v1/sources/health": "sources.read",
   "POST /v1/sources/:key/run": "ingest.manage",
   "POST /v1/sources/:key/pause": "ingest.manage",
@@ -450,6 +452,8 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
     }));
   });
 
+  // Installation readiness: what is still open before real use. Read from stored facts and the running configuration.
+  app.get("/v1/readiness", async () => { const sc = await scannerState(); return tenant(c => installationReadiness(c, { clientDataEnabled: opts.clientDataEnabled === true, scanner: { configured: sc.configured, reachable: sc.reachable }, scheduler: { enabled: !!opts.scheduler }, reasoning: { provider: opts.reasoning ? `${opts.reasoning.adapter.provider} · ${opts.reasoning.adapter.model}` : null } })); });
   // Source health and scheduled ingestion. The schedule is a governed setting; these routes read state and let an operator run, pause or resume one source.
   app.get("/v1/sources/health", async () => tenant(async c => {
     const { schedule, version } = await effectiveSchedule(c);
