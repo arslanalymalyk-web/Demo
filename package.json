@@ -1,0 +1,50 @@
+{
+  "name": "tigeris",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "lint:wording": "node scripts/check-wording.mjs",
+    "typecheck": "tsc -b && tsc -p apps/web",
+    "test": "vitest run",
+    "check": "pnpm lint:wording && pnpm typecheck && pnpm test",
+    "migrate": "node --env-file=.env db/migrate.mjs",
+    "ingest": "node --use-env-proxy --env-file=.env --import tsx packages/ingest/src/cli.ts",
+    "dev": "node --env-file=.env --import tsx apps/api/src/main.ts",
+    "scenario": "node --env-file=.env --import tsx packages/scenario/src/cli.ts",
+    "identity": "node --env-file=.env --import tsx packages/identity/src/cli.ts",
+    "dev-idp": "node --env-file=.env scripts/dev-idp.mjs",
+    "web": "vite --config apps/web/vite.config.ts",
+    "web:build": "vite build --config apps/web/vite.config.ts",
+    "governance": "node --env-file=.env --import tsx packages/governance/src/cli.ts"
+  },
+  "devDependencies": {
+    "@testing-library/dom": "10.4.0",
+    "@testing-library/react": "16.1.0",
+    "@types/node": "^22.10.0",
+    "@types/pg": "^8.11.10",
+    "@types/react": "18.3.12",
+    "@types/react-dom": "18.3.1",
+    "@vitejs/plugin-react": "4.3.4",
+    "jsdom": "25.0.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vite": "5.4.11",
+    "vitest": "^2.1.8"
+  },
+  "dependencies": {
+    "@fastify/swagger": "^9.4.0",
+    "fastify": "^5.2.0",
+    "fflate": "^0.8.3",
+    "jose": "^6.2.17",
+    "pg": "^8.13.1",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "read-excel-file": "^9.3.14",
+    "zod": "^3.24.1"
+  }
+}
