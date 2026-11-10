@@ -13,6 +13,7 @@ import { Handoffs, Memory, Policy } from "./views/governance";
 import { DocumentDetail, Documents } from "./views/documents";
 import { SectorCentre } from "./views/sector";
 import { Settings } from "./views/settings";
+import { MapView } from "./views/map";
 
 type Phase = { name: "starting" } | { name: "signed-out"; error?: string } | { name: "denied"; message: string } | { name: "ready"; me: Me };
 
@@ -88,6 +89,7 @@ export default function App(): ReactNode {
     case "document": body = <DocumentDetail id={route.id!} can={can} />; break;
     case "sector": body = <SectorCentre pack={route.id as "energy" | "sovereign"} me={me} can={can} />; break;
     case "settings": body = <Settings me={me} can={can} />; break;
+    case "map": body = <MapView can={can} />; break;
     case "audit": body = <Audit />; break;
     case "admin": body = <Admin can={can} />; break;
     default: body = <div className="note">That page does not exist. <a href="#/">Back to the Command Centre</a>.</div>;

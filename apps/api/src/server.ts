@@ -10,7 +10,7 @@ import { CaseError, addEvidence, addParticipant, addRecommendation, openCaseFrom
 import { GovernanceError, activatePolicy, createPolicyDraft, listPolicies } from "../../../packages/governance/src/index.js";
 import { IntakeError, tools as docTools, downloadDocument, getDocument, getPage, listDocuments, retryDocument, searchDocuments, submitDocument, type DocumentQueue } from "../../../packages/documents/src/index.js";
 import { SCOPES, SCOPE_INFO, DEFAULT_SIGNAL_RULES, SettingsError, activate as activateSetting, activeOf, createDraft as createSettingDraft, effectiveScenarioDefaults, effectiveThresholds, listVersions as listSettings, type Scope } from "../../../packages/settings/src/index.js";
-import { SECTORS, buildSector, isPack } from "../../../packages/sectors/src/index.js";
+import { SECTORS, buildMap, buildSector, isPack } from "../../../packages/sectors/src/index.js";
 import { getLineage, verifyAuditChain } from "../../../packages/ingest/src/lineage.js";
 import { withTenant } from "../../../packages/ingest/src/store.js";
 
@@ -61,6 +61,7 @@ const ACCESS: Record<string, Permission | null | "public"> = {
   "GET /v1/settings": "settings.read",
   "POST /v1/settings/:scope": "settings.manage",
   "POST /v1/settings/versions/:id/activate": "settings.manage",
+  "GET /v1/map": "graph.read",
   "GET /v1/sectors": "series.read",
   "GET /v1/sectors/:pack": "series.read",
   "POST /v1/sectors/:pack/signals/:id/case": "case.write",
@@ -329,6 +330,9 @@ export function buildServer(opts: { pool: pg.Pool; institutionId: string; verifi
     return domain(req, reply, c => createSettingDraft(c, opts.institutionId, { id: req.principal!.id }, scope, b.data.payload, b.data.note, { templates: Object.fromEntries(Object.values(TEMPLATES).map(t => [t.key, Object.keys(t.defaults(null))])) }), 201);
   });
   app.post("/v1/settings/versions/:id/activate", async (req, reply) => { const id = idOf(req); return id.success ? domain(req, reply, c => activateSetting(c, opts.institutionId, { id: req.principal!.id }, id.data)) : reply.code(400).send({ error: "invalid_id" }); });
+
+  // The map: public-record geography from the graph plus the stored producer series. There is no vessel data.
+  app.get("/v1/map", async () => tenant(async c => buildMap(c, opts.institutionId, await buildSector(c, "energy", new Date(), await effectiveThresholds(c)))));
 
   // Sector command centres. Everything shown is computed from stored evidence; a signal can open a case with its own evidence attached.
   app.get("/v1/sectors", async () => Object.entries(SECTORS).map(([key, p]) => ({ key, name: p.name, domains: p.domains })));

@@ -95,3 +95,8 @@ export interface SettingsView {
   catalog: { key: string; title: string; pack: string; parameters: Record<string, Param> }[];
   exposure: { code: string; name: string; hormuzShare: number; spareBypassKbd: number; linkClass: string }[];
 }
+
+export interface MapEntity { key: string; kind: "facility" | "route" | "chokepoint"; name: string; attrs: Record<string, any> }
+export interface MapLink { id: string; from: string; to: string; predicate: string; linkClass: string; params: Record<string, any>; rationale: string | null; evidence: string[] }
+export interface MapProducer { code: string; name: string; exportsKbd: number; medianKbd: number; changePct: number | null; lagging: boolean; period: string; evidenceId: string; productionKbd: number | null }
+export interface MapData { extent: { lonMin: number; lonMax: number; latMin: number; latMax: number }; entities: MapEntity[]; links: MapLink[]; producers: MapProducer[]; notes: { positions: string; lanes: string; vessels: string } }

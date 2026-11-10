@@ -39,6 +39,7 @@ describe("routing and navigation", () => {
     expect(parseRoute("#/sector/sovereign")).toEqual({ view: "sector", id: "sovereign" });
     expect(parseRoute("#/sector/banking").view).toBe("missing");
     expect(parseRoute("#/settings")).toEqual({ view: "settings", id: null });
+    expect(parseRoute("#/map")).toEqual({ view: "map", id: null });
     expect(parseRoute("#/policy")).toEqual({ view: "policy", id: null });
     expect(parseRoute("#/scenarios/other").view).toBe("missing");
     expect(parseRoute("#/nope").view).toBe("missing");

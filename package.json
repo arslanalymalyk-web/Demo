@@ -20,7 +20,9 @@
     "dev-idp": "node --env-file=.env scripts/dev-idp.mjs",
     "web": "vite --config apps/web/vite.config.ts",
     "web:build": "vite build --config apps/web/vite.config.ts",
-    "governance": "node --env-file=.env --import tsx packages/governance/src/cli.ts"
+    "governance": "node --env-file=.env --import tsx packages/governance/src/cli.ts",
+    "geography": "node --use-env-proxy --env-file=.env --import tsx packages/graph/src/cli.ts",
+    "build-geo": "node scripts/build-geo.mjs"
   },
   "devDependencies": {
     "@testing-library/dom": "10.4.0",
@@ -31,10 +33,12 @@
     "@types/react-dom": "18.3.1",
     "@vitejs/plugin-react": "4.3.4",
     "jsdom": "25.0.1",
+    "topojson-client": "3.1.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vite": "5.4.11",
-    "vitest": "^2.1.8"
+    "vitest": "^2.1.8",
+    "world-atlas": "2.0.2"
   },
   "dependencies": {
     "@fastify/swagger": "^9.4.0",

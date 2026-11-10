@@ -80,6 +80,17 @@ export class PostgresGraph {
     return r.rows.map(x => ({ key: x.key, name: x.name, attrs: x.attrs, linkClass: x.link_class, params: x.params }));
   }
 
+  /** Entities of the given kinds and the active links between them, for drawing. Links carry their class, parameters and evidence. */
+  async subgraph(kinds: EntityKind[]): Promise<{ entities: { key: string; kind: EntityKind; name: string; attrs: Record<string, unknown> }[]; links: { id: string; from: string; to: string; predicate: string; linkClass: LinkClass; params: Record<string, unknown>; rationale: string | null; evidence: string[] }[] }> {
+    const ents = (await this.c.query("SELECT key, kind, name, attrs FROM entities WHERE kind = ANY($1::entity_kind[]) ORDER BY kind, key", [kinds])).rows;
+    const links = (await this.c.query(
+      `SELECT r.id, s.key AS from_key, o.key AS to_key, r.predicate, r.link_class, r.params, r.rationale,
+              COALESCE((SELECT array_agg(evidence_id::text ORDER BY evidence_id) FROM relationship_evidence e WHERE e.relationship_id = r.id AND e.role = 'supports'), '{}') AS evidence
+       FROM relationships r JOIN entities s ON s.id = r.subject_id JOIN entities o ON o.id = r.object_id
+       WHERE r.status = 'active' AND s.kind = ANY($1::entity_kind[]) AND o.kind = ANY($1::entity_kind[]) ORDER BY s.key, r.predicate, o.key`, [kinds])).rows;
+    return { entities: ents, links: links.map(r => ({ id: r.id, from: r.from_key, to: r.to_key, predicate: r.predicate, linkClass: r.link_class, params: r.params, rationale: r.rationale, evidence: r.evidence })) };
+  }
+
   /** Freezes the active graph into a hashed manifest so a scenario can be replayed against the exact same structure. */
   async snapshot(): Promise<{ id: string; hash: string; created: boolean; entities: number; relationships: number }> {
     const ents = (await this.c.query("SELECT key, kind, name, attrs, data_class FROM entities ORDER BY key")).rows;
