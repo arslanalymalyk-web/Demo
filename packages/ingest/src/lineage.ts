@@ -32,3 +32,10 @@ export async function verifyAuditChain(c: pg.PoolClient): Promise<{ ok: boolean;
   const bad = r.rows.find(x => !x.linked || !x.intact);
   return { ok: !bad, events: r.rowCount ?? 0, firstBadSeq: bad ? Number(bad.seq) : null };
 }
+
+export interface AuditRow { seq: number; occurredAt: string; actorType: string; actorId: string | null; action: string; objectType: string | null; objectId: string | null; payload: unknown; prevHash: string; hash: string }
+/** The audit events that concern one case, with their hashes, so an export can be checked against the chain. */
+export async function auditEventsForCase(c: pg.PoolClient, caseId: string, caseKey: string): Promise<AuditRow[]> {
+  const r = await c.query("SELECT seq, occurred_at, actor_type, actor_id, action, object_type, object_id, payload, prev_hash, hash FROM audit_events WHERE (object_type = 'case' AND object_id = $1) OR payload->>'caseKey' = $2 ORDER BY seq", [caseId, caseKey]);
+  return r.rows.map(x => ({ seq: Number(x.seq), occurredAt: new Date(x.occurred_at).toISOString(), actorType: x.actor_type, actorId: x.actor_id, action: x.action, objectType: x.object_type, objectId: x.object_id, payload: x.payload, prevHash: x.prev_hash, hash: x.hash }));
+}

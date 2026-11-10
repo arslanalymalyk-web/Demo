@@ -1,5 +1,5 @@
 import { useState, type FormEvent, type ReactNode } from "react";
-import { api, type CaseDetail, type CaseListRow, type EvidenceRow, type Me, type Reviewer, type RunSummary } from "../api";
+import { api, ApiError, type CaseDetail, type CaseListRow, type EvidenceRow, type Me, type Reviewer, type RunSummary } from "../api";
 import { Async, Card, CaseState, DataClass, PageHead, PolicyBadge, RuleList, Status, Table, useAction, useApi } from "../components";
 import { dateTime, titleCase } from "../format";
 
@@ -61,6 +61,7 @@ export function CaseWorkspace({ id, me }: { id: string; me: Me }): ReactNode {
           <div><dt>Policy in force</dt><dd>{d.activePolicy ? `${d.activePolicy.key} v${d.activePolicy.version}` : <span className="badge b-bad">None active</span>}</dd></div>
           <div><dt>Authority required</dt><dd className="small">{Object.entries(need).map(([k, v]) => <div key={k}>{k}: {v.join(" or ")}</div>)}</dd></div>
           <div><dt>Sensitivity</dt><dd>{d.sensitivity === "restricted" ? <span className="badge b-warn">Restricted</span> : "Internal"}</dd></div>
+          {d.hold ? <div><dt>Retention</dt><dd><span className="badge b-bad">Legal hold</span></dd></div> : null}
         </dl>
         <div className="tabs" role="tablist" aria-label="Case workspace">
           {TABS.map(t => <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>{t}</button>)}
@@ -75,6 +76,31 @@ export function CaseWorkspace({ id, me }: { id: string; me: Me }): ReactNode {
         </div>
       </>;
     }}</Async>
+  );
+}
+
+function RetentionCard({ d, me, reload }: { d: CaseDetail; me: Me; reload: () => void }): ReactNode {
+  const a = useAction(reload), [why, setWhy] = useState(""), [purpose, setPurpose] = useState(""), [busy, setBusy] = useState(false), [err, setErr] = useState<string | null>(null);
+  const canHold = me.permissions.includes("retention.manage"), canExport = me.permissions.includes("export.run");
+  if (!canHold && !canExport && !d.hold) return null;
+  async function download() {
+    setBusy(true); setErr(null);
+    try {
+      const b = await api<unknown>(`/v1/cases/${d.id}/export`, { method: "POST", body: { purpose } });
+      const url = URL.createObjectURL(new Blob([JSON.stringify(b, null, 1)], { type: "application/json" }));
+      const link = document.createElement("a"); link.href = url; link.download = `${d.caseKey}-export.json`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 10_000); setPurpose("");
+    } catch (e) { setErr(e instanceof ApiError ? e.message : "The export failed."); } finally { setBusy(false); }
+  }
+  return (
+    <Card title="Retention" aside={<span className="small muted">Nothing here deletes anything</span>}>
+      {d.hold ? <div className="note err" role="status"><strong>Legal hold.</strong> {d.hold.reason}<div className="small">Placed {dateTime(d.hold.placedAt)}</div></div> : <p className="small muted">This case is kept for ten years with its decisions and audit trail. A hold marks it as protected from any future clean-up.</p>}
+      {canHold ? <form className="stack" onSubmit={e => { e.preventDefault(); void a.run(() => api(`/v1/cases/${d.id}/${d.hold ? "release" : "hold"}`, { method: "POST", body: { reason: why } })).then(ok => ok && setWhy("")); }}>
+        <label>{d.hold ? "Why the hold is released" : "Why a hold is needed"}<textarea required minLength={10} value={why} onChange={e => setWhy(e.target.value)} /></label>
+        <button disabled={a.busy}>{d.hold ? "Release the hold" : "Place a hold"}</button>{a.error ? <div className="note err" role="alert">{a.error}</div> : null}</form> : null}
+      {canExport ? <form className="stack" style={{ marginTop: 12 }} onSubmit={e => { e.preventDefault(); void download(); }}>
+        <label>Export this case: what is it for?<input type="text" required minLength={10} value={purpose} onChange={e => setPurpose(e.target.value)} placeholder="e.g. annual audit sample, ticket 8812" /></label>
+        <button disabled={busy}>Download the record</button><span className="small muted">A complete record with its audit events and a hash that proves it was not altered. The export is itself recorded.</span>{err ? <div className="note err" role="alert">{err}</div> : null}</form> : null}
+    </Card>
   );
 }
 
@@ -107,6 +133,7 @@ function Situation({ d, me, reload }: { d: CaseDetail; me: Me; reload: () => voi
         ) : null}
         {a.error ? <div className="note err" role="alert" style={{ marginTop: 10 }}>{a.error}</div> : null}
       </Card>
+      <RetentionCard d={d} me={me} reload={reload} />
     </div>
   );
 }

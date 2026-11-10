@@ -3,7 +3,7 @@
  "specVersion": "1.5",
  "version": 1,
  "metadata": {
-  "timestamp": "2026-11-10T18:37:03.751Z",
+  "timestamp": "2026-11-10T18:37:47.741Z",
   "tools": [
    {
     "name": "scripts/sbom.mjs"

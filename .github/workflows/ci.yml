@@ -1,5 +1,6 @@
 name: ci
 on: [push, pull_request]
+permissions: { contents: read }
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -18,9 +19,13 @@ jobs:
       - name: System tools for document extraction
         run: sudo apt-get update && sudo apt-get install -y poppler-utils tesseract-ocr tesseract-ocr-eng tesseract-ocr-ara
       - run: pnpm install --frozen-lockfile
+      - name: Dependency vulnerabilities (fails on high or critical)
+        run: pnpm audit --audit-level high
+      - name: Licence policy
+        run: pnpm sbom:check
       - name: Create databases and roles
         run: |
-          ADMIN_URL=postgres://postgres:ci@localhost:5432/postgres OWNER_PASSWORD=ci-owner APP_PASSWORD=ci-app scripts/bootstrap-db.sh | grep '^DATABASE_URL' | sed 's#@localhost:5432#@localhost:5432#' >> "$GITHUB_ENV"
+          ADMIN_URL=postgres://postgres:ci@localhost:5432/postgres OWNER_PASSWORD=ci-owner APP_PASSWORD=ci-app scripts/bootstrap-db.sh | grep '^DATABASE_URL' >> "$GITHUB_ENV"
       - name: Apply migrations
         run: |
           node db/migrate.mjs
@@ -28,3 +33,25 @@ jobs:
         env:
           DATABASE_URL_OWNER: ${{ env.DATABASE_URL_OWNER }}
       - run: pnpm check
+
+  images:
+    runs-on: ubuntu-latest
+    needs: check
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the images
+        run: |
+          docker build --target app -t tigeris-app .
+          docker build --target web -t tigeris-web .
+          docker build -t tigeris-db deploy/db
+      - name: The proxy configuration is valid
+        run: |
+          mkdir tls && openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj "/CN=ci" -keyout tls/tls.key -out tls/tls.crt
+          docker run --rm -v "$PWD/tls:/etc/nginx/tls:ro" -e SERVER_NAME=ci.example -e OIDC_AUTHORITY=https://idp.example/realm -e OIDC_CLIENT_ID=tigeris-web tigeris-web nginx -t
+      - name: The API refuses to start with no configuration
+        run: "! docker run --rm tigeris-app 2>&1 | tee out.txt && grep -q 'configuration refused' out.txt"
+      - name: Image inventory (software bill of materials for the operating-system layer)
+        uses: anchore/sbom-action@v0
+        with: { image: tigeris-app, format: cyclonedx-json, output-file: tigeris-app.image.cdx.json }
+      - uses: actions/upload-artifact@v4
+        with: { name: image-sbom, path: tigeris-app.image.cdx.json }

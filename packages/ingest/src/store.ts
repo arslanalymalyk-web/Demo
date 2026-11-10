@@ -23,3 +23,13 @@ export async function audit(c: pg.PoolClient, institutionId: string, a: { actorT
     [institutionId, a.actorType, a.actorId ?? null, a.action, a.objectType ?? null, a.objectId ?? null, JSON.stringify(a.payload ?? {})],
   );
 }
+
+export interface TableStats { records: number; oldest: string | null; newest: string | null }
+// Table and column names are fixed here, never taken from a request.
+const STATS: Record<string, string> = { audit_events: "occurred_at", evidence_objects: "retrieved_at", human_decisions: "created_at", policy_decisions: "created_at", cases: "created_at", memory_records: "created_at", documents: "created_at", settings_versions: "created_at", scenario_runs: "created_at" };
+/** How many records a table holds and how old they are, for the retention report. */
+export async function tableStats(c: pg.PoolClient, table: keyof typeof STATS & string): Promise<TableStats> {
+  const col = STATS[table]; if (!col) throw new Error(`no stats defined for ${table}`);
+  const r = (await c.query(`SELECT count(*)::int AS n, min(${col}) AS oldest, max(${col}) AS newest FROM ${table}`)).rows[0];
+  return { records: r.n, oldest: r.oldest ? new Date(r.oldest).toISOString() : null, newest: r.newest ? new Date(r.newest).toISOString() : null };
+}

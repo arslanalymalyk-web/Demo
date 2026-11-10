@@ -58,6 +58,7 @@ export interface PolicyRule { ruleId: string; type: string; outcome: "PASS" | "H
 export interface PolicyDecision { id: string; recommendationId: string; policyVersion: number; outcome: "PASS" | "HOLD" | "BLOCK"; results: PolicyRule[]; manifestHash: string; createdAt: string }
 export interface CaseListRow { signal_id?: string | null; id: string; case_key: string; title: string; domain: string; sensitivity: string; state: CaseState; owner_id: string; reviewer_id: string | null; version: number; updated_at: string }
 export interface CaseDetail {
+  hold?: { id: string; reason: string; placedBy: string; placedAt: string } | null;
   id: string; caseKey: string; title: string; objective: string; domain: string; sensitivity: string; state: CaseState; disposition: string | null; version: number; owner: Ref | null; reviewer: Ref | null;
   startSnapshot: { graphHash: string; entities: number; relationships: number; openedAt: string }; signal: Record<string, unknown>; createdAt: string; updatedAt: string;
   activePolicy: { key: string; version: number; authority: Record<string, string[]> } | null; participants: (Ref & { role: string })[];
@@ -100,3 +101,6 @@ export interface MapEntity { key: string; kind: "facility" | "route" | "chokepoi
 export interface MapLink { id: string; from: string; to: string; predicate: string; linkClass: string; params: Record<string, any>; rationale: string | null; evidence: string[] }
 export interface MapProducer { code: string; name: string; exportsKbd: number; medianKbd: number; changePct: number | null; lagging: boolean; period: string; evidenceId: string; productionKbd: number | null }
 export interface MapData { extent: { lonMin: number; lonMax: number; latMin: number; latMax: number }; entities: MapEntity[]; links: MapLink[]; producers: MapProducer[]; notes: { positions: string; lanes: string; vessels: string } }
+
+export interface RetentionHold { id: string; caseId: string; caseKey: string; reason: string; placedBy: string; placedAt: string; releasedBy: string | null; releasedAt: string | null; releaseReason: string | null }
+export interface RetentionReport { years: number; reviewHorizon: string; classes: { key: string; label: string; basis: string; records: number; oldest: string | null; newest: string | null; reviewDue: number }[]; holds: RetentionHold[]; exports: { id: string; subjectId: string; exportedBy: string; exportedAt: string; sha256: string; bytes: number; purpose: string }[]; deletion: string; note: string }

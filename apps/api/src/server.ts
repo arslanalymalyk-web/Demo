@@ -12,6 +12,7 @@ import { audit } from "../../../packages/ingest/src/store.js";
 import { CaseError, addEvidence, addParticipant, addRecommendation, openCaseFromSignal, addScenario, closeCase, createCase, decide, getCase, listCases, listHandoffs, searchMemory, startAnalysis, submitForReview, updateHandoff } from "../../../packages/cases/src/index.js";
 import { GovernanceError, activatePolicy, createPolicyDraft, listPolicies } from "../../../packages/governance/src/index.js";
 import { IntakeError, tools as docTools, downloadDocument, getDocument, getPage, listDocuments, retryDocument, searchDocuments, submitDocument, type DocumentQueue } from "../../../packages/documents/src/index.js";
+import { RetentionError, exportCase, holdFor, placeHold, releaseHold, retentionReport } from "../../../packages/retention/src/index.js";
 import { SCOPES, SCOPE_INFO, DEFAULT_SIGNAL_RULES, SettingsError, activate as activateSetting, activeOf, createDraft as createSettingDraft, effectiveScenarioDefaults, effectiveThresholds, listVersions as listSettings, type Scope } from "../../../packages/settings/src/index.js";
 import { SECTORS, buildMap, buildSector, isPack } from "../../../packages/sectors/src/index.js";
 import { getLineage, verifyAuditChain } from "../../../packages/ingest/src/lineage.js";
@@ -63,6 +64,10 @@ const ACCESS: Record<string, Permission | null | "public"> = {
   "GET /v1/identity/reviewers": "case.write",
   "POST /v1/documents": "document.upload",
   "GET /v1/documents": "document.read",
+  "GET /v1/retention": "retention.read",
+  "POST /v1/cases/:id/hold": "retention.manage",
+  "POST /v1/cases/:id/release": "retention.manage",
+  "POST /v1/cases/:id/export": "export.run",
   "GET /v1/settings": "settings.read",
   "POST /v1/settings/:scope": "settings.manage",
   "POST /v1/settings/versions/:id/activate": "settings.manage",
@@ -310,7 +315,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   const domain = async <T>(req: { principal?: Principal; method: string; url: string }, reply: { code: (n: number) => { send: (b: unknown) => unknown } }, fn: (c: pg.PoolClient) => Promise<T>, okCode?: number | ((r: T) => number)) => {
     try { const r = await tenant(fn); return okCode ? reply.code(typeof okCode === "number" ? okCode : okCode(r)).send(r) : r; }
     catch (e) {
-      if (e instanceof CaseError || e instanceof GovernanceError || e instanceof SettingsError) {
+      if (e instanceof CaseError || e instanceof GovernanceError || e instanceof SettingsError || e instanceof RetentionError) {
         if (e.code === "forbidden") await tenant(c => audit(c, opts.institutionId, { actorType: "principal", actorId: req.principal!.id, action: "governance.refused", objectType: "route", objectId: `${req.method} ${req.url.split("?")[0]}`, payload: { reason: e.message } }));
         return reply.code({ not_found: 404, conflict: 409, invalid: 422, forbidden: 403 }[e.code]).send({ error: e.code, message: e.message });
       }
@@ -323,7 +328,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   app.get("/v1/identity/reviewers", async () => tenant(async c => (await listPrincipals(c)).filter(p => !p.disabled && permissionsOf(p.roles).has("decision.make")).map(p => ({ id: p.id, name: p.displayName ?? p.subject, roles: p.roles }))));
   app.get("/v1/cases", async (req, reply) => { const st = z.enum(["open", "analysis", "in_review", "decided", "closed"]).optional().safeParse((req.query as { state?: string }).state); return st.success ? tenant(c => listCases(c, actor(req), st.data)) : reply.code(400).send({ error: "invalid_query" }); });
   app.post("/v1/cases", async (req, reply) => { const b = caseBody.safeParse(req.body); return b.success ? domain(req, reply, c => createCase(c, opts.institutionId, actor(req), b.data), 201) : bad(reply, b.error); });
-  app.get("/v1/cases/:id", async (req, reply) => { const id = idOf(req); return id.success ? domain(req, reply, c => getCase(c, actor(req), id.data)) : reply.code(400).send({ error: "invalid_id" }); });
+  app.get("/v1/cases/:id", async (req, reply) => { const id = idOf(req); return id.success ? domain(req, reply, async c => ({ ...(await getCase(c, actor(req), id.data) as object), hold: await holdFor(c, id.data) })) : reply.code(400).send({ error: "invalid_id" }); });
   const caseAction = <B,>(path: string, schema: z.ZodType<B, unknown>, run: (c: pg.PoolClient, caseId: string, b: B, a: { id: string; roles: string[] }) => Promise<unknown>, okCode = 200) =>
     app.post(`/v1/cases/:id/${path}`, async (req, reply) => { const id = idOf(req), b = schema.safeParse(req.body ?? {}); if (!id.success) return reply.code(400).send({ error: "invalid_id" }); if (!b.success) return bad(reply, b.error); return domain(req, reply, async c => (await run(c, id.data, b.data, actor(req))) ?? { ok: true }, okCode); });
   caseAction("evidence", evidenceBody, (c, id, b, a) => addEvidence(c, opts.institutionId, a, id, b), 201);
@@ -362,6 +367,19 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
       return out;
     });
   });
+  // Retention: a report, legal holds and case exports. There is no deletion route anywhere in this API.
+  app.get("/v1/retention", async () => tenant(c => retentionReport(c)));
+  const reason = z.object({ reason: z.string().min(1).max(2000) });
+  app.post("/v1/cases/:id/hold", async (req, reply) => { const id = idOf(req), b = reason.safeParse(req.body); if (!id.success) return reply.code(400).send({ error: "invalid_id" }); if (!b.success) return bad(reply, b.error); return domain(req, reply, c => placeHold(c, opts.institutionId, req.principal!.id, id.data, b.data.reason), 201); });
+  app.post("/v1/cases/:id/release", async (req, reply) => { const id = idOf(req), b = reason.safeParse(req.body); if (!id.success) return reply.code(400).send({ error: "invalid_id" }); if (!b.success) return bad(reply, b.error); return domain(req, reply, c => releaseHold(c, opts.institutionId, req.principal!.id, id.data, b.data.reason)); });
+  app.post("/v1/cases/:id/export", async (req, reply) => {
+    const id = idOf(req), b = z.object({ purpose: z.string().min(1).max(2000) }).safeParse(req.body);
+    if (!id.success) return reply.code(400).send({ error: "invalid_id" }); if (!b.success) return bad(reply, b.error);
+    const r = await domain(req, reply, c => exportCase(c, opts.institutionId, actor(req), id.data, b.data.purpose));
+    if (reply.statusCode === 200 && r && typeof r === "object" && "header" in r) reply.header("content-disposition", `attachment; filename="${(r as { header: { caseKey: string } }).header.caseKey}-export.json"`);
+    return r;
+  });
+
   // Governed settings. Tiger's numbers: drafted by one administrator, activated by another, versioned and audited.
   app.get("/v1/settings", async () => tenant(async c => {
     const versions = await listSettings(c), links = await new PostgresGraph(c, opts.institutionId).linked("chokepoint:hormuz", "constrains_exports_of").catch(() => []);

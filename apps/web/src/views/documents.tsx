@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { ApiError, upload, type DocConfig, type DocDetail, type DocHit, type DocRow } from "../api";
+import { ApiError, api, upload, type DocConfig, type DocDetail, type DocHit, type DocRow } from "../api";
 import { Async, Card, DataClass, PageHead, Table, useApi } from "../components";
 import { dateTime, num } from "../format";
 
@@ -92,7 +92,7 @@ export function DocumentDetail({ id, can }: { id: string; can: (p: string) => bo
   useEffect(() => { if (!active) return; const t = setInterval(d.reload, 2500); return () => clearInterval(t); }, [active, d.reload]);
   const [page, setPage] = useState(1);
   const pg = useApi<{ page_no: number; method: string; text: string; confidence: number | null }>(d.data && d.data.pages.length ? `/v1/documents/${id}/pages/${page}` : null);
-  const retry = async () => { const { api } = await import("../api"); await api(`/v1/documents/${id}/retry`, { method: "POST", body: {} }); d.reload(); };
+  const retry = async () => { await api(`/v1/documents/${id}/retry`, { method: "POST", body: {} }); d.reload(); };
   return (
     <>
       <PageHead title="Document" aside={<a className="btn" href="#/documents">All documents</a>}>Stored unchanged and hashed. The page record shows exactly how each page of text was obtained.</PageHead>
