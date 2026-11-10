@@ -16,11 +16,17 @@ _Confidential. Property of Tiger Capital AI. Prepared for Tiger Capital AI and t
 | Abuse and denial | Rate limits in the proxy and the API; per-route body limits |
 | Information leakage | Generic server errors with a request id; log redaction; metrics behind a separate token and hidden from outside |
 | Backup theft | Backups and log archive encrypted (AES-256, key from the client's secret store); SHA-256 manifests; tampered backups refused |
+| Model produces false or injected content | Output is JSON verified by code: cited facts must exist, every number must appear in them, advice, links and markup are refused; any failure rejects the whole draft; the model has no database access; drafts are never records |
+| Data leaves to a model vendor | Off by default; data-class gate (public record, sample, scenario only); case text never sent; https, no redirects, key from the secret store; every call logged with prompt hash |
 | Supply chain | Pinned dependencies, zero known vulnerabilities at last audit, licence allowlist, SBOM, offline bundle, CI audit |
 
 ## Control inventory
 
 See [CONTROL-MATRIX.md](CONTROL-MATRIX.md) for each control, its standard mapping, status and where the evidence is.
+
+## Model use
+
+Prompt injection in a stored fact cannot cause an action, because the model can only return text that must pass verification and cannot reach any system. It can still produce a draft that passes verification and reads misleadingly, so every draft is labelled and a person reads it. The model vendor sees the prompt: confirm its data terms before enabling, and prefer an on-premises endpoint for sensitive work.
 
 ## Known gaps
 
@@ -36,7 +42,8 @@ Decision 11 and the client's review require all of these before institution data
 4. Image build and CI run, and review of the image inventory.
 5. Backup drill in the client's environment, with the result recorded.
 6. The client's own security review recorded, then `TIGERIS_CLIENT_DATA_REVIEW_DONE=true` set deliberately.
-7. Arabic OCR checked on real samples if Arabic scans are in scope.
+7. A written data-processing position from the chosen model provider, or an on-premises model, before the Assistant is enabled for any real deployment.
+8. Arabic OCR checked on real samples if Arabic scans are in scope.
 
 ## Reporting a vulnerability
 

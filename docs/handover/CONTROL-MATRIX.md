@@ -46,3 +46,6 @@ This is a self-assessment of the build against SOC 2 (Trust Services Criteria) f
 | C38 | Business continuity plan and exercises | A1.3 | A.5.29, A.5.30 | Organisational | owner to write; drill in client environment |
 | C39 | Physical and environmental security | CC6.4 | A.7 | Organisational | client infrastructure |
 | C40 | Change management with approvals | CC8.1 | A.8.32 | Partial (code review process is the team's) | repository history, CI |
+| C41 | Model output verification; citations required | PI1.2, PI1.3 | A.8.28 | Implemented (tested with fakes only) | `packages/reasoning/src/verify.ts`, `tests/reasoning.test.ts` |
+| C42 | Data-class gate for model prompts | C1.1, CC6.7 | A.5.14, A.8.11 | Implemented | `packages/reasoning/src/facts.ts` |
+| C43 | Immutable, audited log of every model call | CC7.2 | A.8.15 | Implemented | `reasoning_calls`, audit event `reasoning.call` |

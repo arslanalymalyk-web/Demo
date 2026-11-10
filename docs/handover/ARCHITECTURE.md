@@ -20,6 +20,7 @@ A TypeScript modular monolith (Node 22, pnpm workspace). One Fastify API (`apps/
 | `sectors` | Versioned signal rules over stored series; signal to case |
 | `settings` | Governed settings: draft, active, retired; two-person activation |
 | `retention` | Ten-year report, legal holds, case exports with integrity hash |
+| `reasoning` | Model-agnostic drafting. A model proposes cited text from stored facts, fixed code verifies every figure and citation, every call is logged (ADR 0021) |
 
 ## Data model
 
@@ -59,6 +60,10 @@ Ivory design, navy theme, right-to-left aware. Runtime configuration comes from 
 ## Decisions
 
 `docs/adr` holds twenty architecture decision records. `docs/decisions` holds the 200-answer decision log and the resolutions. Decision 11 (independent penetration test and client review before client data) governs go-live.
+
+## Reasoning
+
+`packages/reasoning`: facts are gathered in a transaction (briefing, case evidence, or retrieval over stored facts), numbered F1..Fn and filtered to sendable data classes. The model call happens outside any transaction through an adapter (Claude API, OpenAI-compatible, or the local extractive adapter). `judge` accepts the reply only if every item cites supplied facts and every number matches them. The call, verdict and verified output go to `reasoning_calls` (immutable) with an audit event. The model has no database access and writes nothing.
 
 ## Deliberate limits
 

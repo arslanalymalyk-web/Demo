@@ -16,11 +16,12 @@ _Confidential. Property of Tiger Capital AI. Prepared for the client's IT and se
 | 8 | Database | Backup service | Base backups and write-ahead log | Encrypted before storage; key from the client's secret store |
 | 9 | Monitoring system | `/metrics` | Counters and timings, no record content | Separate bearer token; blocked at the proxy from outside |
 | 10 | API | Handoff to the institution's own systems | Human-authorized tasks | A person owns each handoff; no automatic execution |
+| 11 | API | The configured model endpoint (only when a model is connected) | A prompt of numbered stored facts, public-record, sample and scenario classes only | https required in production, host on the network allowlist, key from the secret store, no redirects, every call logged. Institution data, licensed and third-party derived data are withheld; text typed into cases is never sent |
 
 ## What does not flow
 
 - No client data leaves the deployment. No data goes to other institutions. No learning is shared across institutions.
-- No data is sent to a model vendor. Models do not compute or write facts.
+- No data is sent to a model vendor unless the client connects one. Then only public-record, sample and scenario facts go in a prompt. Models do not compute or write facts.
 - No vessel or tanker tracking data is used until written terms exist.
 - Institution documents and client data are switched off until the client's review is complete (decision 11).
 

@@ -34,3 +34,29 @@ export async function seriesStatusForPack(c: pg.PoolClient, pack: string): Promi
      WHERE $1 = ANY(s.packs) GROUP BY s.id, src.source_key, le.validation_status, le.id ORDER BY s.series_key`, [pack]);
   return r.rows.map(x => ({ seriesKey: x.series_key, title: x.title, frequency: x.frequency, maxAgeDays: x.max_age_days, latestPeriod: x.latest ? new Date(x.latest).toISOString() : null, validation: x.validation_status, evidenceId: x.evidence_id, sourceKey: x.source_key }));
 }
+
+export interface StoredFact { evidenceId: string; dataClass: string; subject: string; predicate: string; value: unknown; unit: string | null; validTime: string | null }
+const toFact = (x: { evidence_id: string; data_class: string; subject: string; predicate: string; value: unknown; unit: string | null; valid_time: Date | null }): StoredFact =>
+  ({ evidenceId: x.evidence_id, dataClass: x.data_class, subject: x.subject, predicate: x.predicate, value: x.value, unit: x.unit, validTime: x.valid_time ? new Date(x.valid_time).toISOString() : null });
+
+/** The stored facts behind a set of evidence records, newest first. Quarantined and rejected records are never returned. */
+export async function factsForEvidence(c: pg.PoolClient, ids: string[], perEvidence = 12): Promise<StoredFact[]> {
+  if (ids.length === 0) return [];
+  const r = await c.query(
+    `SELECT * FROM (SELECT f.evidence_id, e.data_class, f.subject, f.predicate, f.value, f.unit, f.valid_time, row_number() OVER (PARTITION BY f.evidence_id ORDER BY f.valid_time DESC NULLS LAST, f.subject, f.predicate) AS rn
+       FROM evidence_facts f JOIN evidence_objects e ON e.id = f.evidence_id WHERE f.evidence_id = ANY($1::uuid[]) AND e.validation_status IN ('accepted','warned')) q
+     WHERE rn <= $2 ORDER BY evidence_id, rn`, [ids, perEvidence]);
+  return r.rows.map(toFact);
+}
+
+/** The newest stored facts whose subject or predicate contains any of the words. Used to ground a free-text question. */
+export async function searchFacts(c: pg.PoolClient, words: string[], limit = 20): Promise<StoredFact[]> {
+  const ws = words.map(w => w.replace(/[%_\\]/g, "").toLowerCase()).filter(w => w.length >= 3).slice(0, 6);
+  if (ws.length === 0) return [];
+  const r = await c.query(
+    `SELECT f.evidence_id, e.data_class, f.subject, f.predicate, f.value, f.unit, f.valid_time
+     FROM evidence_facts f JOIN evidence_objects e ON e.id = f.evidence_id
+     WHERE e.validation_status IN ('accepted','warned') AND EXISTS (SELECT 1 FROM unnest($1::text[]) w WHERE lower(f.subject) LIKE '%' || w || '%' OR lower(f.predicate) LIKE '%' || w || '%')
+     ORDER BY f.valid_time DESC NULLS LAST LIMIT $2`, [ws, limit]);
+  return r.rows.map(toFact);
+}

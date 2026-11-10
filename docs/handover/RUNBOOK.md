@@ -56,6 +56,10 @@ Logs are JSON with secrets redacted. Every response carries a request id; use it
 | Uploads rejected | Over size or page limit, unsafe type, or institution documents not enabled |
 | Rate limited (429) | Limit per address reached; check for a proxy that hides client addresses |
 
+## Assistant and model calls
+
+If drafts fail with "the model could not be reached", check the egress network, the allowlist and the key. Verification failures ("Failed verification") are expected sometimes and are not faults: the draft is discarded and the call is logged. Auditors read the call log in the Assistant screen. Per-person limit is 30 drafts an hour. To turn the Assistant off, set the provider to `off` and restart the API.
+
 ## Retention
 
 Nothing is deleted automatically. Use the Retention screen for the ten-year report, to place or release a legal hold on a case, and to export a case with its integrity hash. Held cases must not be removed from any storage by hand.

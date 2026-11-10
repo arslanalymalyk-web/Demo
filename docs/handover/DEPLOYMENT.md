@@ -57,6 +57,10 @@ Production start-up refuses weak or missing configuration and lists every proble
 6. Start the backup service and run the restore drill in [BACKUP-RESTORE.md](BACKUP-RESTORE.md) before go-live.
 7. Review the image inventory produced by CI and the SBOM in `docs/handover/sbom`.
 
+## Optional: connecting a model
+
+The Assistant is off by default and nothing is sent anywhere. To enable it, set `TIGERIS_REASONING_PROVIDER` to `anthropic`, `openai_compatible` (any endpoint, including an on-premises model) or `local_extractive` (no network, quotes stored facts only). Set `TIGERIS_MODEL_NAME`, `TIGERIS_MODEL_BASE_URL` (https in production) and the key as a mounted secret (`TIGERIS_MODEL_API_KEY_FILE`). The API container sits on an internal network with no route out, so also add the egress network to it and allow exactly the model host on the network allowlist. Only public-record, sample and scenario facts are placed in prompts. Review the provider's data terms first. Not yet tried against a real endpoint.
+
 ## Before client data is connected
 
 Complete the items in [SECURITY.md](SECURITY.md) under "Before client data": independent penetration test, malware scanning of uploads, identity provider check, the backup drill in this environment, and the client's own review.

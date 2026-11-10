@@ -79,6 +79,10 @@ services:
       TIGERIS_TRUST_PROXY: "true"
       TIGERIS_CLIENT_DATA_ENABLED: ${TIGERIS_CLIENT_DATA_ENABLED:-false}
       TIGERIS_CLIENT_DATA_REVIEW_DONE: ${TIGERIS_CLIENT_DATA_REVIEW_DONE:-false}
+      TIGERIS_REASONING_PROVIDER: ${TIGERIS_REASONING_PROVIDER:-off}   # off | anthropic | openai_compatible | local_extractive
+      TIGERIS_MODEL_NAME: ${TIGERIS_MODEL_NAME:-}
+      TIGERIS_MODEL_BASE_URL: ${TIGERIS_MODEL_BASE_URL:-}
+      # A hosted model also needs: the egress network below, the model host on the network allowlist, and TIGERIS_MODEL_API_KEY_FILE pointing at a mounted secret.
       LOG_LEVEL: ${LOG_LEVEL:-info}
     secrets: [db_app_url, metrics_token]
     networks: [backend, idp]

@@ -15,6 +15,7 @@ import { IntakeError, tools as docTools, downloadDocument, getDocument, getPage,
 import { RetentionError, exportCase, holdFor, placeHold, releaseHold, retentionReport } from "../../../packages/retention/src/index.js";
 import { SCOPES, SCOPE_INFO, DEFAULT_SIGNAL_RULES, SettingsError, activate as activateSetting, activeOf, createDraft as createSettingDraft, effectiveScenarioDefaults, effectiveThresholds, listVersions as listSettings, type Scope } from "../../../packages/settings/src/index.js";
 import { SECTORS, buildMap, buildSector, composeBriefing, isPack, type BriefingCase, type BriefingRun } from "../../../packages/sectors/src/index.js";
+import { ReasoningError, listCalls, runReasoning, type ModelAdapter } from "../../../packages/reasoning/src/index.js";
 import { getLineage, verifyAuditChain } from "../../../packages/ingest/src/lineage.js";
 import { withTenant } from "../../../packages/ingest/src/store.js";
 
@@ -75,6 +76,9 @@ const ACCESS: Record<string, Permission | null | "public"> = {
   "GET /v1/sectors": "series.read",
   "GET /v1/sectors/:pack": "series.read",
   "GET /v1/briefings/:pack": "series.read",
+  "GET /v1/reasoning/config": "sources.read",
+  "POST /v1/reasoning/run": "reasoning.use",
+  "GET /v1/reasoning/calls": "reasoning.read",
   "POST /v1/sectors/:pack/signals/:id/case": "case.write",
   "GET /v1/documents/search": "document.read",
   "GET /v1/documents/config": "document.read",
@@ -106,7 +110,7 @@ declare module "fastify" { interface FastifyRequest { principal?: Principal } }
  * The institution is fixed by deployment configuration (one deployment per institution).
  * Every route except /health needs a bearer token from the institution's identity provider and a provisioned, active principal with the right role.
  */
-export interface ServerOptions { pool: pg.Pool; institutionId: string; verifier: TokenVerifier; documents?: DocumentQueue; clientDataEnabled?: boolean; logger?: FastifyServerOptions["logger"]; rateLimit?: { max: number; timeWindow: string } | null; metricsToken?: string | null; trustProxy?: boolean }
+export interface ServerOptions { pool: pg.Pool; institutionId: string; verifier: TokenVerifier; documents?: DocumentQueue; clientDataEnabled?: boolean; logger?: FastifyServerOptions["logger"]; rateLimit?: { max: number; timeWindow: string } | null; metricsToken?: string | null; trustProxy?: boolean; reasoning?: { adapter: ModelAdapter; perHour?: number } | null }
 
 export function buildServer(opts: ServerOptions): FastifyInstance {
   const app = Fastify({
@@ -416,6 +420,33 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
       templates: Object.values(TEMPLATES).map(t => ({ key: t.key, pack: t.pack, title: t.title })), viewerId: req.principal!.id,
     }));
   });
+
+  // Reasoning: a model drafts, fixed code verifies, a person decides. Off unless a model is configured. Every call is recorded and audited.
+  const reasoningLimiter = new RateLimiter(opts.reasoning?.perHour ?? 30, 3_600_000);
+  const reasoningBody = z.discriminatedUnion("task", [
+    z.object({ task: z.literal("summary_briefing"), pack: z.enum(["energy", "sovereign"]) }),
+    z.object({ task: z.enum(["summary_case", "questions_case", "recommendation_case"]), caseId: uuid }),
+    z.object({ task: z.literal("answer"), question: z.string().trim().min(5).max(500) }),
+  ]);
+  app.get("/v1/reasoning/config", async () => ({ enabled: !!opts.reasoning, provider: opts.reasoning?.adapter.provider ?? null, model: opts.reasoning?.adapter.model ?? null, perHour: opts.reasoning?.perHour ?? 30, sentClasses: ["public_record", "sample_dataset", "scenario_simulation"] }));
+  app.post("/v1/reasoning/run", async (req, reply) => {
+    if (!opts.reasoning) return reply.code(503).send({ error: "reasoning_not_configured", message: "No model is connected to this deployment." });
+    const b = reasoningBody.safeParse(req.body); if (!b.success) return bad(reply, b.error);
+    const wait = reasoningLimiter.check(req.principal!.id);
+    if (wait > 0) return reply.code(429).header("retry-after", String(Math.ceil(wait / 1000))).send({ error: "rate_limited", message: "Too many drafts this hour." });
+    const ctx = {
+      pool: opts.pool, institutionId: opts.institutionId, adapter: opts.reasoning.adapter,
+      briefing: async (c: pg.PoolClient, pack: "energy" | "sovereign") => composeBriefing({ view: await buildSector(c, pack, new Date(), await effectiveThresholds(c)), cases: null, runs: (await listRuns(c)) as BriefingRun[], templates: Object.values(TEMPLATES).map(t => ({ key: t.key, pack: t.pack, title: t.title })), viewerId: req.principal!.id }),
+      getCase: (c: pg.PoolClient, a: { id: string; roles: string[] }, id: string) => getCase(c, a, id) as Promise<any>,
+    };
+    try { return await runReasoning(ctx, actor(req), b.data); }
+    catch (e) {
+      if (e instanceof CaseError || e instanceof ReasoningError) return reply.code({ not_found: 404, conflict: 409, invalid: 422, forbidden: 403 }[e.code]).send({ error: e.code, message: e.message });
+      throw e;
+    }
+  });
+  app.get("/v1/reasoning/calls", async () => tenant(c => listCalls(c, 50)));
+
   app.post("/v1/sectors/:pack/signals/:id/case", async (req, reply) => {
     const { pack, id } = req.params as { pack: string; id: string };
     if (!isPack(pack)) return reply.code(404).send({ error: "not_found" });

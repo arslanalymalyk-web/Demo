@@ -28,6 +28,12 @@ _Confidential. Property of Tiger Capital AI. Prepared for the named recipients o
 3. A host, TLS certificate, secret store and backup location.
 4. The names of the first administrators (two, for settings approval).
 
+## Model use
+
+1. Decide the provider (Claude API, an OpenAI-compatible service, or an on-premises model) and obtain its key or address.
+2. A written data-processing position from the provider, before anything real is sent.
+3. Try the real adapter against the chosen endpoint and record the result.
+
 ## Engineering and verification
 
 1. Run the CI `images` job and review the image inventory (the images have never been built).

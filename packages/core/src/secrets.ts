@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 
 /** Secrets and settings may come from the environment or, for any NAME, from a file named by NAME_FILE (a mounted secret). */
-export const SECRET_NAMES = ["DATABASE_URL", "DATABASE_URL_OWNER", "OIDC_ISSUER", "OIDC_AUDIENCE", "OIDC_JWKS_URI", "METRICS_TOKEN", "TIGERIS_INSTITUTION_ID"] as const;
+export const SECRET_NAMES = ["DATABASE_URL", "DATABASE_URL_OWNER", "OIDC_ISSUER", "OIDC_AUDIENCE", "OIDC_JWKS_URI", "METRICS_TOKEN", "TIGERIS_INSTITUTION_ID", "TIGERIS_MODEL_API_KEY"] as const;
 
 export function applyFileSecrets(env: NodeJS.ProcessEnv = process.env): void {
   for (const name of SECRET_NAMES) {

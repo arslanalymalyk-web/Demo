@@ -13,6 +13,7 @@ import { Handoffs, Memory, Policy } from "./views/governance";
 import { DocumentDetail, Documents } from "./views/documents";
 import { SectorCentre } from "./views/sector";
 import { BriefingView } from "./views/briefing";
+import { Assistant } from "./views/reasoning";
 import { Settings } from "./views/settings";
 import { MapView } from "./views/map";
 import { Retention } from "./views/retention";
@@ -91,6 +92,7 @@ export default function App(): ReactNode {
     case "document": body = <DocumentDetail id={route.id!} can={can} />; break;
     case "sector": body = <SectorCentre pack={route.id as "energy" | "sovereign"} me={me} can={can} />; break;
     case "briefing": body = <BriefingView pack={route.id as "energy" | "sovereign"} />; break;
+    case "assistant": body = <Assistant can={can} />; break;
     case "settings": body = <Settings me={me} can={can} />; break;
     case "map": body = <MapView can={can} />; break;
     case "retention": body = <Retention />; break;

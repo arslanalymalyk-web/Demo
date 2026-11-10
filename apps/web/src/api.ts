@@ -115,3 +115,12 @@ export interface Briefing {
   caveats: { kind: "stale" | "lagging" | "unvalidated" | "note"; text: string; evidenceId: string | null }[];
   dataClass: "public_record"; contentHash: string;
 }
+
+export interface ReasoningConfig { enabled: boolean; provider: string | null; model: string | null; perHour: number; sentClasses: string[] }
+export interface ReasoningItem { text: string; cites: string[]; type: "statement" | "question" | "missing_evidence" }
+export interface ReasoningResult {
+  id: string; task: string; verdict: "accepted" | "rejected" | "refused" | "blocked" | "error"; reasons: string[];
+  output: { title: string | null; items: ReasoningItem[]; description: string | null; evidenceIds: string[] } | null;
+  facts: { ref: string; text: string; evidenceId: string | null; dataClass: string }[]; withheld: number; provider: string; model: string; promptHash: string; factsHash: string; at: string;
+}
+export interface ReasoningCall { id: string; task: string; subject: string | null; provider: string; model: string; verdict: string; reasons: string[]; fact_count: number; data_classes: string[]; duration_ms: number; created_at: string; raw_output: string | null; prompt_hash: string }
