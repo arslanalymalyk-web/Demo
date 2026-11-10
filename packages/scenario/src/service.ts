@@ -3,7 +3,7 @@ import { PostgresGraph } from "../../graph/src/index.js";
 import { readObservations, type ObservedFact } from "../../ingest/src/observations.js";
 import { audit } from "../../ingest/src/store.js";
 import { backtest, type Backtest } from "./backtest.js";
-import { hashManifest, hashResults, manifestOf, metricKey, resolveParams, runScenario, type RunOutput } from "./engine.js";
+import { hashManifest, hashResults, manifestOf, metricKey, resolveParams, runScenario, type DefaultsOverride, type RunOutput } from "./engine.js";
 import { TEMPLATES } from "./templates.js";
 import type { Baseline, CountryBaseline, FactRef, GdpBaseline, Need, Param, Params, ReservesBaseline } from "./types.js";
 
@@ -91,7 +91,7 @@ export async function episodeBacktest(c: pg.PoolClient, institutionId: string, b
 
 export const EPISODE = { baseline: "2026-02", months: ["2026-03", "2026-04", "2026-05"] };
 
-export interface RunRequest { templateKey: string; overrides?: Record<string, number>; baselineMonth?: string; createdBy: string; today?: Date }
+export interface RunRequest { templateKey: string; overrides?: Record<string, number>; baselineMonth?: string; createdBy: string; today?: Date; settings?: DefaultsOverride }
 export interface StoredRun extends RunOutput { id: string; manifestHash: string; resultsHash: string; baseline: Baseline; graphHash: string | null; created: string }
 
 async function calibratedFlexibility(c: pg.PoolClient, institutionId: string): Promise<{ flex: number | null; test: Backtest }> {
@@ -105,7 +105,7 @@ export async function createRun(c: pg.PoolClient, institutionId: string, req: Ru
   const tpl = TEMPLATES[req.templateKey]!;
   const baseline = await loadBaseline(c, institutionId, req.baselineMonth ?? await latestBaselineMonth(c), tpl.needs);
   const flex = tpl.usesFlexibility ? (await calibratedFlexibility(c, institutionId)).flex : null;
-  const params = resolveParams(req.templateKey, req.overrides ?? {}, flex);
+  const params = resolveParams(req.templateKey, req.overrides ?? {}, flex, req.settings);
   const snap = await new PostgresGraph(c, institutionId).snapshot();
   const out = runScenario(req.templateKey, baseline, params, today);
   const manifest = manifestOf({ templateKey: out.templateKey, templateVersion: out.templateVersion, formulaVersion: out.formulaVersion, params, baseline, graphHash: snap.hash });
@@ -113,7 +113,7 @@ export async function createRun(c: pg.PoolClient, institutionId: string, req: Ru
   const ins = await c.query(
     `INSERT INTO scenario_runs (institution_id, template_key, template_version, formula_version, graph_snapshot_id, assumptions, inputs, manifest_hash, results_hash, confidence, sensitivity, created_by)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id, created_at`,
-    [institutionId, out.templateKey, out.templateVersion, out.formulaVersion, snap.id, JSON.stringify(params), JSON.stringify({ baseline, graphHash: snap.hash, runAt: today.toISOString() }), manifestHash, resultsHash, JSON.stringify(out.confidence), JSON.stringify(out.sensitivity), req.createdBy]);
+    [institutionId, out.templateKey, out.templateVersion, out.formulaVersion, snap.id, JSON.stringify(params), JSON.stringify({ baseline, graphHash: snap.hash, runAt: today.toISOString(), settings: { scenarioDefaultsVersion: req.settings?.version ?? null } }), manifestHash, resultsHash, JSON.stringify(out.confidence), JSON.stringify(out.sensitivity), req.createdBy]);
   const id = ins.rows[0].id as string;
   for (const m of out.metrics) {
     const lineage = { band: out.bands[metricKey(m)], formula: out.formulaVersion, params: Object.fromEntries(Object.entries(params).map(([k, v]) => [k, v.basis])), baselineMonth: baseline.month, evidence: [...new Set([...(baseline.priceRef ? [baseline.priceRef.evidenceId] : []), ...baseline.countries.flatMap(x => x.refs.map(r => r.evidenceId)), ...(baseline.reserves?.refs ?? []).map(r => r.evidenceId), ...(baseline.gdp?.refs ?? []).map(r => r.evidenceId)])] };

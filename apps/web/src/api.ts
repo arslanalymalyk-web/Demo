@@ -88,3 +88,10 @@ export interface SectorView {
   countries?: { lagging: boolean; code: string; name: string; exportsKbd: number; medianKbd: number; changePct: number | null; productionKbd: number | null; period: string; evidenceId: string }[];
   composition?: { quarter: string; rows: { label: string; millionSar: number; share: number; evidenceId: string }[] };
 }
+
+export interface SettingVersion { id: string; scope: "signal_rules" | "scenario_defaults" | "hormuz_exposure"; version: number; status: "draft" | "active" | "retired"; payload: any; note: string; createdBy: string; activatedBy: string | null; createdAt: string; activatedAt: string | null }
+export interface SettingsView {
+  scopes: { scope: SettingVersion["scope"]; title: string; description: string; active: SettingVersion | null; versions: SettingVersion[]; defaults: any }[];
+  catalog: { key: string; title: string; pack: string; parameters: Record<string, Param> }[];
+  exposure: { code: string; name: string; hormuzShare: number; spareBypassKbd: number; linkClass: string }[];
+}

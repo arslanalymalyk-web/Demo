@@ -239,13 +239,13 @@ export async function searchMemory(c: pg.PoolClient, actor: Actor, q?: string): 
   return r.rows;
 }
 
-export interface SignalInput { signalId: string; ruleId: string; rulesVersion: string; title: string; objective: string; domain: string; observedAt: string; evidenceIds: string[]; values: Record<string, unknown> }
+export interface SignalInput { signalId: string; ruleId: string; rulesVersion: string; settingsVersion?: number | null; title: string; objective: string; domain: string; observedAt: string; evidenceIds: string[]; values: Record<string, unknown> }
 
 /** Opens a case from a detected signal, with the signal's own evidence attached. A signal that already has an open case returns that case. */
 export async function openCaseFromSignal(c: pg.PoolClient, inst: string, actor: Actor, i: SignalInput): Promise<{ id: string; caseKey: string; existing: boolean }> {
   const ex = await c.query("SELECT id, case_key FROM cases WHERE signal->>'id' = $1 AND state <> 'closed' ORDER BY created_at LIMIT 1", [i.signalId]);
   if (ex.rows[0]) return { id: ex.rows[0].id, caseKey: ex.rows[0].case_key, existing: true };
-  const made = await createCase(c, inst, actor, { title: i.title.slice(0, 200), objective: i.objective, domain: i.domain, signal: { id: i.signalId, ruleId: i.ruleId, rulesVersion: i.rulesVersion, observedAt: i.observedAt, values: i.values, origin: "sector signal" } });
+  const made = await createCase(c, inst, actor, { title: i.title.slice(0, 200), objective: i.objective, domain: i.domain, signal: { id: i.signalId, ruleId: i.ruleId, rulesVersion: i.rulesVersion, settingsVersion: i.settingsVersion ?? null, observedAt: i.observedAt, values: i.values, origin: "sector signal" } });
   for (const e of new Set(i.evidenceIds)) await addEvidence(c, inst, actor, made.id, { evidenceId: e, role: "context", note: `Evidence behind signal ${i.signalId}` });
   return { ...made, existing: false };
 }

@@ -10,9 +10,14 @@ export interface RunOutput { templateKey: string; templateVersion: number; formu
 export const metricKey = (m: Pick<Metric, "horizon" | "metric">): string => `${m.horizon}|${m.metric}`;
 const values = (ps: Params): Record<string, number> => Object.fromEntries(Object.entries(ps).map(([k, x]) => [k, x.value]));
 
-export function resolveParams(templateKey: string, overrides: Record<string, number>, flex: number | null): Params {
+/** Institution-set defaults for a template's parameters, from the governed settings. */
+export interface DefaultsOverride { version: number | null; defaults: Record<string, Record<string, { value: number; low: number; high: number; basis: "assumed" | "sourced"; note: string; evidenceId?: string }>> }
+
+export function resolveParams(templateKey: string, overrides: Record<string, number>, flex: number | null, set?: DefaultsOverride): Params {
   const t = TEMPLATES[templateKey]; if (!t) throw new Error(`unknown scenario template ${templateKey}`);
   const ps = t.defaults(flex);
+  // Governed settings replace the code defaults, and say so in the parameter's own note.
+  for (const [k, d] of Object.entries(set?.defaults[templateKey] ?? {})) if (ps[k]) ps[k] = { value: d.value, low: d.low, high: d.high, basis: d.basis, note: `${d.note} (institution setting v${set!.version}${d.evidenceId ? `, evidence ${d.evidenceId.slice(0, 8)}` : ""})` };
   for (const [k, v] of Object.entries(overrides)) {
     const d = ps[k]; if (!d) throw new Error(`unknown parameter ${k} for ${templateKey}`);
     if (!Number.isFinite(v)) throw new Error(`parameter ${k} must be a finite number`);

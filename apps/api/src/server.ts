@@ -9,6 +9,7 @@ import { audit } from "../../../packages/ingest/src/store.js";
 import { CaseError, addEvidence, addParticipant, addRecommendation, openCaseFromSignal, addScenario, closeCase, createCase, decide, getCase, listCases, listHandoffs, searchMemory, startAnalysis, submitForReview, updateHandoff } from "../../../packages/cases/src/index.js";
 import { GovernanceError, activatePolicy, createPolicyDraft, listPolicies } from "../../../packages/governance/src/index.js";
 import { IntakeError, tools as docTools, downloadDocument, getDocument, getPage, listDocuments, retryDocument, searchDocuments, submitDocument, type DocumentQueue } from "../../../packages/documents/src/index.js";
+import { SCOPES, SCOPE_INFO, DEFAULT_SIGNAL_RULES, SettingsError, activate as activateSetting, activeOf, createDraft as createSettingDraft, effectiveScenarioDefaults, effectiveThresholds, listVersions as listSettings, type Scope } from "../../../packages/settings/src/index.js";
 import { SECTORS, buildSector, isPack } from "../../../packages/sectors/src/index.js";
 import { getLineage, verifyAuditChain } from "../../../packages/ingest/src/lineage.js";
 import { withTenant } from "../../../packages/ingest/src/store.js";
@@ -57,6 +58,9 @@ const ACCESS: Record<string, Permission | null | "public"> = {
   "GET /v1/identity/reviewers": "case.write",
   "POST /v1/documents": "document.upload",
   "GET /v1/documents": "document.read",
+  "GET /v1/settings": "settings.read",
+  "POST /v1/settings/:scope": "settings.manage",
+  "POST /v1/settings/versions/:id/activate": "settings.manage",
   "GET /v1/sectors": "series.read",
   "GET /v1/sectors/:pack": "series.read",
   "POST /v1/sectors/:pack/signals/:id/case": "case.write",
@@ -228,7 +232,7 @@ export function buildServer(opts: { pool: pg.Pool; institutionId: string; verifi
     if (!b.success) return reply.code(400).send({ error: "invalid_body", details: b.error.flatten() });
     if (!TEMPLATES[b.data.template]) return reply.code(404).send({ error: "unknown_template" });
     try {
-      const run = await tenant(c => createRun(c, opts.institutionId, { templateKey: b.data.template, overrides: b.data.overrides, createdBy: req.principal!.id, ...(b.data.baselineMonth ? { baselineMonth: b.data.baselineMonth } : {}) }));
+      const run = await tenant(async c => createRun(c, opts.institutionId, { settings: await effectiveScenarioDefaults(c), templateKey: b.data.template, overrides: b.data.overrides, createdBy: req.principal!.id, ...(b.data.baselineMonth ? { baselineMonth: b.data.baselineMonth } : {}) }));
       return reply.code(201).send({ id: run.id, manifestHash: run.manifestHash, resultsHash: run.resultsHash, confidence: run.confidence, link: `/v1/scenarios/runs/${run.id}` });
     } catch (e) {
       if (e instanceof Error && /unknown parameter|must be a finite|seed it first|no export observations|no Brent price|ingest the JODI/.test(e.message)) return reply.code(422).send({ error: "cannot_run", message: e.message });
@@ -257,7 +261,7 @@ export function buildServer(opts: { pool: pg.Pool; institutionId: string; verifi
   const domain = async <T>(req: { principal?: Principal; method: string; url: string }, reply: { code: (n: number) => { send: (b: unknown) => unknown } }, fn: (c: pg.PoolClient) => Promise<T>, okCode?: number | ((r: T) => number)) => {
     try { const r = await tenant(fn); return okCode ? reply.code(typeof okCode === "number" ? okCode : okCode(r)).send(r) : r; }
     catch (e) {
-      if (e instanceof CaseError || e instanceof GovernanceError) {
+      if (e instanceof CaseError || e instanceof GovernanceError || e instanceof SettingsError) {
         if (e.code === "forbidden") await tenant(c => audit(c, opts.institutionId, { actorType: "principal", actorId: req.principal!.id, action: "governance.refused", objectType: "route", objectId: `${req.method} ${req.url.split("?")[0]}`, payload: { reason: e.message } }));
         return reply.code({ not_found: 404, conflict: 409, invalid: 422, forbidden: 403 }[e.code]).send({ error: e.code, message: e.message });
       }
@@ -309,16 +313,33 @@ export function buildServer(opts: { pool: pg.Pool; institutionId: string; verifi
       return out;
     });
   });
+  // Governed settings. Tiger's numbers: drafted by one administrator, activated by another, versioned and audited.
+  app.get("/v1/settings", async () => tenant(async c => {
+    const versions = await listSettings(c), links = await new PostgresGraph(c, opts.institutionId).linked("chokepoint:hormuz", "constrains_exports_of").catch(() => []);
+    return {
+      scopes: await (async () => { const out = []; for (const scope of SCOPES) out.push({ scope, ...SCOPE_INFO[scope], active: await activeOf(c, scope), versions: versions.filter(v => v.scope === scope), defaults: scope === "signal_rules" ? DEFAULT_SIGNAL_RULES : {} }); return out; })(),
+      catalog: Object.values(TEMPLATES).map(t => ({ key: t.key, title: t.title, pack: t.pack, parameters: t.defaults(null) })),
+      exposure: links.map(l => ({ code: String(l.attrs.code), name: l.name, hormuzShare: Number(l.params.hormuzShare), spareBypassKbd: Number(l.params.spareBypassKbd), linkClass: l.linkClass })),
+    };
+  }));
+  app.post("/v1/settings/:scope", async (req, reply) => {
+    const scope = (req.params as { scope: string }).scope as Scope, b = z.object({ payload: z.unknown(), note: z.string().min(1).max(2000) }).safeParse(req.body);
+    if (!SCOPES.includes(scope)) return reply.code(404).send({ error: "not_found" });
+    if (!b.success) return bad(reply, b.error);
+    return domain(req, reply, c => createSettingDraft(c, opts.institutionId, { id: req.principal!.id }, scope, b.data.payload, b.data.note, { templates: Object.fromEntries(Object.values(TEMPLATES).map(t => [t.key, Object.keys(t.defaults(null))])) }), 201);
+  });
+  app.post("/v1/settings/versions/:id/activate", async (req, reply) => { const id = idOf(req); return id.success ? domain(req, reply, c => activateSetting(c, opts.institutionId, { id: req.principal!.id }, id.data)) : reply.code(400).send({ error: "invalid_id" }); });
+
   // Sector command centres. Everything shown is computed from stored evidence; a signal can open a case with its own evidence attached.
   app.get("/v1/sectors", async () => Object.entries(SECTORS).map(([key, p]) => ({ key, name: p.name, domains: p.domains })));
-  app.get("/v1/sectors/:pack", async (req, reply) => { const k = (req.params as { pack: string }).pack; return isPack(k) ? tenant(c => buildSector(c, k)) : reply.code(404).send({ error: "not_found" }); });
+  app.get("/v1/sectors/:pack", async (req, reply) => { const k = (req.params as { pack: string }).pack; return isPack(k) ? tenant(async c => buildSector(c, k, new Date(), await effectiveThresholds(c))) : reply.code(404).send({ error: "not_found" }); });
   app.post("/v1/sectors/:pack/signals/:id/case", async (req, reply) => {
     const { pack, id } = req.params as { pack: string; id: string };
     if (!isPack(pack)) return reply.code(404).send({ error: "not_found" });
     return domain(req, reply, async c => {
-      const view = await buildSector(c, pack), sig = view.signals.find(s => s.id === id);
+      const view = await buildSector(c, pack, new Date(), await effectiveThresholds(c)), sig = view.signals.find(s => s.id === id);
       if (!sig) throw new CaseError("this signal is no longer active, so a case cannot be opened from it", "not_found");
-      const r = await openCaseFromSignal(c, opts.institutionId, actor(req), { signalId: sig.id, ruleId: sig.ruleId, rulesVersion: view.rulesVersion, title: sig.title, objective: `${sig.detail} Decide whether this needs a response and what the evidence supports.`, domain: SECTORS[pack].domains[0]!, observedAt: sig.observedAt, evidenceIds: sig.evidenceIds, values: sig.values });
+      const r = await openCaseFromSignal(c, opts.institutionId, actor(req), { signalId: sig.id, ruleId: sig.ruleId, rulesVersion: view.rulesVersion, settingsVersion: view.settingsVersion, title: sig.title, objective: `${sig.detail} Decide whether this needs a response and what the evidence supports.`, domain: SECTORS[pack].domains[0]!, observedAt: sig.observedAt, evidenceIds: sig.evidenceIds, values: sig.values });
       return r;
     }, r => r.existing ? 200 : 201);
   });

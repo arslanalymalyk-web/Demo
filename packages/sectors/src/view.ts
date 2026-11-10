@@ -1,6 +1,6 @@
 import type pg from "pg";
 import { readObservations, seriesStatusForPack, type ObservedFact, type SeriesStatus } from "../../ingest/src/observations.js";
-import { ENERGY_RULES, RULES_VERSION, SOVEREIGN_RULES, energySignals, median, rank, sovereignSignals, type Point, type RuleDoc, type Signal } from "./rules.js";
+import { DEFAULT_THRESHOLDS, RULES_VERSION, energySignals, median, rank, ruleDocs, sovereignSignals, type Point, type RuleDoc, type Signal, type SignalThresholds } from "./rules.js";
 
 export type PackKey = "energy" | "sovereign";
 export const SECTORS: Record<PackKey, { name: string; domains: string[]; seriesPack: string }> = {
@@ -15,7 +15,7 @@ export interface Trend { id: string; title: string; unit: string; points: { t: s
 export interface CountryRow { lagging: boolean; code: string; name: string; exportsKbd: number; medianKbd: number; changePct: number | null; productionKbd: number | null; period: string; evidenceId: string }
 export interface CompositionRow { label: string; millionSar: number; share: number; evidenceId: string }
 export interface SectorView {
-  pack: PackKey; name: string; asOf: string; rulesVersion: string; figures: Figure[]; trends: Trend[]; signals: Signal[]; rules: RuleDoc[]; freshness: SeriesStatus[];
+  pack: PackKey; name: string; asOf: string; rulesVersion: string; settingsVersion: number | null; figures: Figure[]; trends: Trend[]; signals: Signal[]; rules: RuleDoc[]; freshness: SeriesStatus[];
   countries?: CountryRow[]; composition?: { quarter: string; rows: CompositionRow[] };
 }
 
@@ -29,7 +29,7 @@ const dir = (x: number): "up" | "down" | "flat" => x > 0.0005 ? "up" : x < -0.00
 const change = (x: number | null, vs: string): Figure["change"] => x === null ? null : { text: `${fmtPct(x)} ${vs}`, direction: dir(x) };
 const trend = (id: string, title: string, unit: string, pts: Point[], n: number): Trend | null => { const s = sorted(pts).slice(-n); return s.length ? { id, title, unit, points: s.map(p => ({ t: p.t, v: p.v })), evidenceId: s.at(-1)!.evidenceId } : null; };
 
-async function energy(c: pg.PoolClient, now: Date): Promise<Omit<SectorView, "pack" | "name" | "asOf" | "rulesVersion" | "freshness">> {
+async function energy(c: pg.PoolClient, now: Date, th: SignalThresholds): Promise<Omit<SectorView, "pack" | "name" | "asOf" | "rulesVersion" | "settingsVersion" | "freshness">> {
   const from = monthsAgo(now, 48);
   const jodi = await readObservations(c, JODI, { from }), exportsBy: Record<string, Point[]> = {}, prod: Record<string, Point[]> = {};
   for (const f of jodi) {
@@ -58,12 +58,12 @@ async function energy(c: pg.PoolClient, now: Date): Promise<Omit<SectorView, "pa
     countries.sort((a, b) => Number(a.lagging) - Number(b.lagging) || b.exportsKbd - a.exportsKbd);
   }
   const bt = trend("brent", "Brent crude, monthly", "US$ per barrel", brent, 36); if (bt) trends.unshift(bt);
-  return { figures, trends, countries, signals: rank(energySignals({ exports: exportsBy, brent }, NAMES)), rules: ENERGY_RULES };
+  return { figures, trends, countries, signals: rank(energySignals({ exports: exportsBy, brent }, NAMES, th)), rules: ruleDocs("energy", th) };
 }
 
 const RES_CLASSES: [string, string][] = [["Foreign currency and deposits abroad", "Foreign Currency and Deposits Abroad"], ["Foreign securities", "Investment in Foreign Securities"], ["Monetary gold", "Monetary Gold"], ["IMF reserve position", "Reserve Position in the IMF"], ["Special drawing rights", "SDR"]];
 
-async function sovereign(c: pg.PoolClient, now: Date): Promise<Omit<SectorView, "pack" | "name" | "asOf" | "rulesVersion" | "freshness">> {
+async function sovereign(c: pg.PoolClient, now: Date, th: SignalThresholds): Promise<Omit<SectorView, "pack" | "name" | "asOf" | "rulesVersion" | "settingsVersion" | "freshness">> {
   const from = monthsAgo(now, 72), figures: Figure[] = [], trends: Trend[] = [];
   const resAll = await readObservations(c, RES, { from }), cls = (t: string) => resAll.filter(f => f.subject.endsWith(`=${t}`)).map(pt);
   const total = sorted(cls("Total Reserves Assets")), liquid = sorted(cls("Foreign Currency and Deposits Abroad"));
@@ -89,10 +89,10 @@ async function sovereign(c: pg.PoolClient, now: Date): Promise<Omit<SectorView, 
     const at = (a: string) => gdp.find(f => f.validTime === lastQ && f.subject.endsWith(`=${a}`)), o = at("Oil Activities"), n = at("Non-Oil Activities"), g = at("Government Activities");
     if (o && n && g) figures.push({ id: "oil-gdp", label: "Oil activities, share of nominal GDP", value: o.value / (o.value + n.value + g.value) * 100, unit: "% of GDP by activity", period: lastQ, change: null, evidenceId: o.evidenceId, validation: o.validation, note: "A share, so it does not depend on the unit the source leaves unstated." });
   }
-  return { figures, trends, composition, signals: rank(sovereignSignals({ reserves: total, liquid, trade, inflation })), rules: SOVEREIGN_RULES };
+  return { figures, trends, composition, signals: rank(sovereignSignals({ reserves: total, liquid, trade, inflation }, th)), rules: ruleDocs("sovereign", th) };
 }
 
-export async function buildSector(c: pg.PoolClient, pack: PackKey, now: Date = new Date()): Promise<SectorView> {
-  const body = pack === "energy" ? await energy(c, now) : await sovereign(c, now);
-  return { pack, name: SECTORS[pack].name, asOf: now.toISOString(), rulesVersion: RULES_VERSION, freshness: await seriesStatusForPack(c, SECTORS[pack].seriesPack), ...body };
+export async function buildSector(c: pg.PoolClient, pack: PackKey, now: Date = new Date(), settings: { thresholds: SignalThresholds; version: number | null } = { thresholds: DEFAULT_THRESHOLDS, version: null }): Promise<SectorView> {
+  const body = pack === "energy" ? await energy(c, now, settings.thresholds) : await sovereign(c, now, settings.thresholds);
+  return { pack, name: SECTORS[pack].name, asOf: now.toISOString(), rulesVersion: RULES_VERSION, settingsVersion: settings.version, freshness: await seriesStatusForPack(c, SECTORS[pack].seriesPack), ...body };
 }
