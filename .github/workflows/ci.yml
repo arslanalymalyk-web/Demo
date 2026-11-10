@@ -1,0 +1,30 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env: { POSTGRES_PASSWORD: ci }
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - name: System tools for document extraction
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils tesseract-ocr tesseract-ocr-eng tesseract-ocr-ara
+      - run: pnpm install --frozen-lockfile
+      - name: Create databases and roles
+        run: |
+          ADMIN_URL=postgres://postgres:ci@localhost:5432/postgres OWNER_PASSWORD=ci-owner APP_PASSWORD=ci-app scripts/bootstrap-db.sh | grep '^DATABASE_URL' | sed 's#@localhost:5432#@localhost:5432#' >> "$GITHUB_ENV"
+      - name: Apply migrations
+        run: |
+          node db/migrate.mjs
+          DATABASE_URL_OWNER="$DATABASE_URL_TEST_OWNER" node db/migrate.mjs
+        env:
+          DATABASE_URL_OWNER: ${{ env.DATABASE_URL_OWNER }}
+      - run: pnpm check
