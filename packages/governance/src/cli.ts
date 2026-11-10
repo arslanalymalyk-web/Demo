@@ -1,8 +1,10 @@
+import { applyFileSecrets } from "../../core/src/secrets.js";
 import pg from "pg";
 import { withTenant } from "../../ingest/src/store.js";
 import { ensureDefaultPolicy, listPolicies } from "./store.js";
 
 const [cmd] = process.argv.slice(2);
+applyFileSecrets();
 const institutionId = process.env.TIGERIS_INSTITUTION_ID;
 if (!process.env.DATABASE_URL || !institutionId) { console.error("DATABASE_URL and TIGERIS_INSTITUTION_ID are required"); process.exit(2); }
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });

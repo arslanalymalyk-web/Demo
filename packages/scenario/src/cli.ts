@@ -1,3 +1,4 @@
+import { applyFileSecrets } from "../../core/src/secrets.js";
 import pg from "pg";
 import { PostgresGraph, seedOilStructure } from "../../graph/src/index.js";
 import { withTenant } from "../../ingest/src/store.js";
@@ -5,6 +6,7 @@ import { TEMPLATES } from "./templates.js";
 import { EPISODE, createRun, episodeBacktest, getRun, latestBaselineMonth, replayRun } from "./service.js";
 
 const [cmd, ...rest] = process.argv.slice(2);
+applyFileSecrets();
 const institutionId = process.env.TIGERIS_INSTITUTION_ID;
 if (!process.env.DATABASE_URL || !institutionId) { console.error("DATABASE_URL and TIGERIS_INSTITUTION_ID are required"); process.exit(2); }
 const opt = (n: string) => { const i = rest.indexOf(`--${n}`); return i >= 0 ? rest[i + 1] : undefined; };

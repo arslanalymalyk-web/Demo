@@ -1,3 +1,4 @@
+import { applyFileSecrets } from "../../core/src/secrets.js";
 import pg from "pg";
 import { connectorFor, PoliteHttp } from "../../connectors/src/index.js";
 import { runIngestion } from "./pipeline.js";
@@ -5,6 +6,7 @@ import { registerSources, setSourceStatus } from "./registry.js";
 
 const args = process.argv.slice(2);
 const opt = (name: string) => { const i = args.indexOf(`--${name}`); return i >= 0 ? args[i + 1] : undefined; };
+applyFileSecrets();
 const institutionId = process.env.TIGERIS_INSTITUTION_ID;
 if (!process.env.DATABASE_URL || !institutionId) { console.error("DATABASE_URL and TIGERIS_INSTITUTION_ID are required"); process.exit(2); }
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });

@@ -1,3 +1,4 @@
+import { applyFileSecrets } from "../../core/src/secrets.js";
 import pg from "pg";
 import { PoliteHttp } from "../../connectors/src/index.js";
 import { DocumentQueue, submitDocument } from "../../documents/src/index.js";
@@ -6,6 +7,7 @@ import { GEOGRAPHY_SOURCE, seedGeography } from "./geography.js";
 import { PostgresGraph } from "./repository.js";
 
 const [cmd, ...rest] = process.argv.slice(2);
+applyFileSecrets();
 const institutionId = process.env.TIGERIS_INSTITUTION_ID;
 if (!process.env.DATABASE_URL || !institutionId) { console.error("DATABASE_URL and TIGERIS_INSTITUTION_ID are required"); process.exit(2); }
 const opt = (n: string) => { const i = rest.indexOf(`--${n}`); return i >= 0 ? rest[i + 1] : undefined; };

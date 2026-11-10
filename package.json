@@ -22,7 +22,10 @@
     "web:build": "vite build --config apps/web/vite.config.ts",
     "governance": "node --env-file=.env --import tsx packages/governance/src/cli.ts",
     "geography": "node --use-env-proxy --env-file=.env --import tsx packages/graph/src/cli.ts",
-    "build-geo": "node scripts/build-geo.mjs"
+    "build-geo": "node scripts/build-geo.mjs",
+    "sbom": "node scripts/sbom.mjs",
+    "sbom:check": "node scripts/sbom.mjs --check",
+    "audit": "pnpm audit --audit-level high"
   },
   "devDependencies": {
     "@testing-library/dom": "10.4.0",
@@ -31,13 +34,12 @@
     "@types/pg": "^8.11.10",
     "@types/react": "18.3.12",
     "@types/react-dom": "18.3.1",
-    "@vitejs/plugin-react": "4.3.4",
+    "@vitejs/plugin-react": "5.2.0",
     "jsdom": "25.0.1",
     "topojson-client": "3.1.0",
-    "tsx": "^4.19.2",
     "typescript": "^5.7.2",
-    "vite": "5.4.11",
-    "vitest": "^2.1.8",
+    "vite": "7.3.8",
+    "vitest": "^4.1.12",
     "world-atlas": "2.0.2"
   },
   "dependencies": {
@@ -46,9 +48,11 @@
     "fflate": "^0.8.3",
     "jose": "^6.2.17",
     "pg": "^8.13.1",
+    "prom-client": "15.1.3",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "read-excel-file": "^9.3.14",
-    "zod": "^3.24.1"
+    "tsx": "^4.19.2",
+    "zod": "^4.6.7"
   }
 }

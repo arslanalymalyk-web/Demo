@@ -1,0 +1,1810 @@
+{
+ "bomFormat": "CycloneDX",
+ "specVersion": "1.5",
+ "version": 1,
+ "metadata": {
+  "timestamp": "2026-11-10T18:37:03.751Z",
+  "tools": [
+   {
+    "name": "scripts/sbom.mjs"
+   }
+  ],
+  "component": {
+   "type": "application",
+   "name": "tigeris",
+   "version": "0.1.0",
+   "properties": [
+    {
+     "name": "pnpm-lock.yaml sha256",
+     "value": "1844c39a3d67d1f5115766c2d28358b876380ae1ea09c4ac6794158e6c9b6cbc"
+    },
+    {
+     "name": "scope",
+     "value": "production dependencies"
+    }
+   ]
+  }
+ },
+ "components": [
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/%40esbuild/linux-x64@0.28.2",
+   "name": "@esbuild/linux-x64",
+   "version": "0.28.2",
+   "purl": "pkg:npm/%40esbuild/linux-x64@0.28.2",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/evanw/esbuild#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/%40fastify/ajv-compiler@4.0.7",
+   "name": "@fastify/ajv-compiler",
+   "version": "4.0.7",
+   "purl": "pkg:npm/%40fastify/ajv-compiler@4.0.7",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/fastify/ajv-compiler#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/%40fastify/deepmerge@3.2.4",
+   "name": "@fastify/deepmerge",
+   "version": "3.2.4",
+   "purl": "pkg:npm/%40fastify/deepmerge@3.2.4",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/fastify/deepmerge#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/%40fastify/error@4.2.1",
+   "name": "@fastify/error",
+   "version": "4.2.1",
+   "purl": "pkg:npm/%40fastify/error@4.2.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/fastify/fastify-error#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/%40fastify/fast-json-stringify-compiler@5.1.1",
+   "name": "@fastify/fast-json-stringify-compiler",
+   "version": "5.1.1",
+   "purl": "pkg:npm/%40fastify/fast-json-stringify-compiler@5.1.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/fastify/fast-json-stringify-compiler#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/%40fastify/forwarded@3.1.2",
+   "name": "@fastify/forwarded",
+   "version": "3.1.2",
+   "purl": "pkg:npm/%40fastify/forwarded@3.1.2",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/fastify/forwarded#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/%40fastify/merge-json-schemas@0.2.2",
+   "name": "@fastify/merge-json-schemas",
+   "version": "0.2.2",
+   "purl": "pkg:npm/%40fastify/merge-json-schemas@0.2.2",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/fastify/merge-json-schemas#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/%40fastify/proxy-addr@5.1.2",
+   "name": "@fastify/proxy-addr",
+   "version": "5.1.2",
+   "purl": "pkg:npm/%40fastify/proxy-addr@5.1.2",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/fastify/proxy-addr#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/%40fastify/swagger@9.9.3",
+   "name": "@fastify/swagger",
+   "version": "9.9.3",
+   "purl": "pkg:npm/%40fastify/swagger@9.9.3",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/fastify/fastify-swagger#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/%40opentelemetry/api@1.10.0",
+   "name": "@opentelemetry/api",
+   "version": "1.10.0",
+   "purl": "pkg:npm/%40opentelemetry/api@1.10.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/open-telemetry/opentelemetry-js/tree/main/api"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/%40pinojs/redact@0.4.0",
+   "name": "@pinojs/redact",
+   "version": "0.4.0",
+   "purl": "pkg:npm/%40pinojs/redact@0.4.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/pinojs/redact#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/abstract-logging@2.0.1",
+   "name": "abstract-logging",
+   "version": "2.0.1",
+   "purl": "pkg:npm/abstract-logging@2.0.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/jsumners/abstract-logging#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/ajv-formats@3.0.1",
+   "name": "ajv-formats",
+   "version": "3.0.1",
+   "purl": "pkg:npm/ajv-formats@3.0.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/ajv-validator/ajv-formats#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/ajv@8.20.0",
+   "name": "ajv",
+   "version": "8.20.0",
+   "purl": "pkg:npm/ajv@8.20.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://ajv.js.org"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/atomic-sleep@1.0.0",
+   "name": "atomic-sleep",
+   "version": "1.0.0",
+   "purl": "pkg:npm/atomic-sleep@1.0.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/davidmarkclements/atomic-sleep#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/avvio@9.3.1",
+   "name": "avvio",
+   "version": "9.3.1",
+   "purl": "pkg:npm/avvio@9.3.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/fastify/avvio#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/bintrees@1.0.2",
+   "name": "bintrees",
+   "version": "1.0.2",
+   "purl": "pkg:npm/bintrees@1.0.2",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/vadimg/js_bintrees#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/cookie@2.0.2",
+   "name": "cookie",
+   "version": "2.0.2",
+   "purl": "pkg:npm/cookie@2.0.2",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/jshttp/cookie#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/debug@4.4.3",
+   "name": "debug",
+   "version": "4.4.3",
+   "purl": "pkg:npm/debug@4.4.3",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/debug-js/debug#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/dequal@2.0.3",
+   "name": "dequal",
+   "version": "2.0.3",
+   "purl": "pkg:npm/dequal@2.0.3",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/lukeed/dequal#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/esbuild@0.28.2",
+   "name": "esbuild",
+   "version": "0.28.2",
+   "purl": "pkg:npm/esbuild@0.28.2",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/evanw/esbuild#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/fast-decode-uri-component@1.0.1",
+   "name": "fast-decode-uri-component",
+   "version": "1.0.1",
+   "purl": "pkg:npm/fast-decode-uri-component@1.0.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/delvedor/fast-decode-uri-component#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/fast-deep-equal@3.1.3",
+   "name": "fast-deep-equal",
+   "version": "3.1.3",
+   "purl": "pkg:npm/fast-deep-equal@3.1.3",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/epoberezkin/fast-deep-equal#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/fast-json-stringify@7.3.5",
+   "name": "fast-json-stringify",
+   "version": "7.3.5",
+   "purl": "pkg:npm/fast-json-stringify@7.3.5",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/fastify/fast-json-stringify#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/fast-querystring@1.1.2",
+   "name": "fast-querystring",
+   "version": "1.1.2",
+   "purl": "pkg:npm/fast-querystring@1.1.2",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/anonrig/fast-querystring#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/fast-uri@3.1.9",
+   "name": "fast-uri",
+   "version": "3.1.9",
+   "purl": "pkg:npm/fast-uri@3.1.9",
+   "licenses": [
+    {
+     "license": {
+      "id": "BSD-3-Clause"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/fastify/fast-uri"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/fast-uri@4.2.3",
+   "name": "fast-uri",
+   "version": "4.2.3",
+   "purl": "pkg:npm/fast-uri@4.2.3",
+   "licenses": [
+    {
+     "license": {
+      "id": "BSD-3-Clause"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/fastify/fast-uri"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/fastify-plugin@6.0.1",
+   "name": "fastify-plugin",
+   "version": "6.0.1",
+   "purl": "pkg:npm/fastify-plugin@6.0.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/fastify/fastify-plugin#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/fastify@5.12.8",
+   "name": "fastify",
+   "version": "5.12.8",
+   "purl": "pkg:npm/fastify@5.12.8",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://fastify.dev/"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/fastq@1.20.3",
+   "name": "fastq",
+   "version": "1.20.3",
+   "purl": "pkg:npm/fastq@1.20.3",
+   "licenses": [
+    {
+     "license": {
+      "id": "ISC"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/mcollina/fastq#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/fflate@0.8.3",
+   "name": "fflate",
+   "version": "0.8.3",
+   "purl": "pkg:npm/fflate@0.8.3",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://101arrowz.github.io/fflate"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/find-my-way@9.10.0",
+   "name": "find-my-way",
+   "version": "9.10.0",
+   "purl": "pkg:npm/find-my-way@9.10.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/delvedor/find-my-way#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/graceful-fs@4.2.11",
+   "name": "graceful-fs",
+   "version": "4.2.11",
+   "purl": "pkg:npm/graceful-fs@4.2.11",
+   "licenses": [
+    {
+     "license": {
+      "id": "ISC"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/isaacs/node-graceful-fs#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/ipaddr.js@2.5.0",
+   "name": "ipaddr.js",
+   "version": "2.5.0",
+   "purl": "pkg:npm/ipaddr.js@2.5.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/whitequark/ipaddr.js#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/jose@6.2.17",
+   "name": "jose",
+   "version": "6.2.17",
+   "purl": "pkg:npm/jose@6.2.17",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/panva/jose"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/js-tokens@4.0.0",
+   "name": "js-tokens",
+   "version": "4.0.0",
+   "purl": "pkg:npm/js-tokens@4.0.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/lydell/js-tokens#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/json-schema-ref-resolver@3.0.1",
+   "name": "json-schema-ref-resolver",
+   "version": "3.0.1",
+   "purl": "pkg:npm/json-schema-ref-resolver@3.0.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/fastify/json-schema-ref-resolver#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/json-schema-resolver@3.0.0",
+   "name": "json-schema-resolver",
+   "version": "3.0.0",
+   "purl": "pkg:npm/json-schema-resolver@3.0.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/Eomm/json-schema-resolver#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/json-schema-traverse@1.0.0",
+   "name": "json-schema-traverse",
+   "version": "1.0.0",
+   "purl": "pkg:npm/json-schema-traverse@1.0.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/epoberezkin/json-schema-traverse#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/light-my-request@6.8.0",
+   "name": "light-my-request",
+   "version": "6.8.0",
+   "purl": "pkg:npm/light-my-request@6.8.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "BSD-3-Clause"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/fastify/light-my-request#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/loose-envify@1.4.0",
+   "name": "loose-envify",
+   "version": "1.4.0",
+   "purl": "pkg:npm/loose-envify@1.4.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/zertosh/loose-envify"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/ms@2.1.3",
+   "name": "ms",
+   "version": "2.1.3",
+   "purl": "pkg:npm/ms@2.1.3",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/vercel/ms#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/node-int64@0.4.0",
+   "name": "node-int64",
+   "version": "0.4.0",
+   "purl": "pkg:npm/node-int64@0.4.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/broofa/node-int64#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/on-exit-leak-free@2.1.2",
+   "name": "on-exit-leak-free",
+   "version": "2.1.2",
+   "purl": "pkg:npm/on-exit-leak-free@2.1.2",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/mcollina/on-exit-or-gc#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/openapi-types@12.1.3",
+   "name": "openapi-types",
+   "version": "12.1.3",
+   "purl": "pkg:npm/openapi-types@12.1.3",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/kogosoftwarellc/open-api/tree/master/packages/openapi-types#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/pg-cloudflare@1.4.1",
+   "name": "pg-cloudflare",
+   "version": "1.4.1",
+   "purl": "pkg:npm/pg-cloudflare@1.4.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/brianc/node-postgres#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/pg-connection-string@2.14.1",
+   "name": "pg-connection-string",
+   "version": "2.14.1",
+   "purl": "pkg:npm/pg-connection-string@2.14.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/brianc/node-postgres/tree/master/packages/pg-connection-string"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/pg-int8@1.0.1",
+   "name": "pg-int8",
+   "version": "1.0.1",
+   "purl": "pkg:npm/pg-int8@1.0.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "ISC"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/charmander/pg-int8#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/pg-pool@3.14.0",
+   "name": "pg-pool",
+   "version": "3.14.0",
+   "purl": "pkg:npm/pg-pool@3.14.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/brianc/node-postgres/tree/master/packages/pg-pool#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/pg-protocol@1.16.1",
+   "name": "pg-protocol",
+   "version": "1.16.1",
+   "purl": "pkg:npm/pg-protocol@1.16.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/brianc/node-postgres#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/pg-types@2.2.0",
+   "name": "pg-types",
+   "version": "2.2.0",
+   "purl": "pkg:npm/pg-types@2.2.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/brianc/node-pg-types"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/pg@8.23.1",
+   "name": "pg",
+   "version": "8.23.1",
+   "purl": "pkg:npm/pg@8.23.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/brianc/node-postgres"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/pgpass@1.0.5",
+   "name": "pgpass",
+   "version": "1.0.5",
+   "purl": "pkg:npm/pgpass@1.0.5",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/hoegaarden/pgpass#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/pino-abstract-transport@3.0.0",
+   "name": "pino-abstract-transport",
+   "version": "3.0.0",
+   "purl": "pkg:npm/pino-abstract-transport@3.0.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/pinojs/pino-abstract-transport#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/pino-std-serializers@7.1.0",
+   "name": "pino-std-serializers",
+   "version": "7.1.0",
+   "purl": "pkg:npm/pino-std-serializers@7.1.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/pinojs/pino-std-serializers#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/pino@10.4.0",
+   "name": "pino",
+   "version": "10.4.0",
+   "purl": "pkg:npm/pino@10.4.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://getpino.io"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/postgres-array@2.0.0",
+   "name": "postgres-array",
+   "version": "2.0.0",
+   "purl": "pkg:npm/postgres-array@2.0.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/bendrucker/postgres-array#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/postgres-bytea@1.0.1",
+   "name": "postgres-bytea",
+   "version": "1.0.1",
+   "purl": "pkg:npm/postgres-bytea@1.0.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/bendrucker/postgres-bytea#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/postgres-date@1.0.7",
+   "name": "postgres-date",
+   "version": "1.0.7",
+   "purl": "pkg:npm/postgres-date@1.0.7",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/bendrucker/postgres-date#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/postgres-interval@1.2.0",
+   "name": "postgres-interval",
+   "version": "1.2.0",
+   "purl": "pkg:npm/postgres-interval@1.2.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/bendrucker/postgres-interval#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/process-warning@5.1.1",
+   "name": "process-warning",
+   "version": "5.1.1",
+   "purl": "pkg:npm/process-warning@5.1.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/fastify/fastify-warning#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/prom-client@15.1.3",
+   "name": "prom-client",
+   "version": "15.1.3",
+   "purl": "pkg:npm/prom-client@15.1.3",
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/siimon/prom-client"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/quick-format-unescaped@4.0.4",
+   "name": "quick-format-unescaped",
+   "version": "4.0.4",
+   "purl": "pkg:npm/quick-format-unescaped@4.0.4",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/davidmarkclements/quick-format#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/react-dom@18.3.1",
+   "name": "react-dom",
+   "version": "18.3.1",
+   "purl": "pkg:npm/react-dom@18.3.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://reactjs.org/"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/react@18.3.1",
+   "name": "react",
+   "version": "18.3.1",
+   "purl": "pkg:npm/react@18.3.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://reactjs.org/"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/read-excel-file@9.3.14",
+   "name": "read-excel-file",
+   "version": "9.3.14",
+   "purl": "pkg:npm/read-excel-file@9.3.14",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://gitlab.com/catamphetamine/read-excel-file#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/real-require@1.0.0",
+   "name": "real-require",
+   "version": "1.0.0",
+   "purl": "pkg:npm/real-require@1.0.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/pinojs/real-require"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/require-from-string@2.0.2",
+   "name": "require-from-string",
+   "version": "2.0.2",
+   "purl": "pkg:npm/require-from-string@2.0.2",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/floatdrop/require-from-string#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/ret@0.5.1",
+   "name": "ret",
+   "version": "0.5.1",
+   "purl": "pkg:npm/ret@0.5.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/fent/ret.js#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/reusify@1.1.0",
+   "name": "reusify",
+   "version": "1.1.0",
+   "purl": "pkg:npm/reusify@1.1.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/mcollina/reusify#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/rfdc@1.4.1",
+   "name": "rfdc",
+   "version": "1.4.1",
+   "purl": "pkg:npm/rfdc@1.4.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/davidmarkclements/rfdc#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/safe-regex2@5.1.2",
+   "name": "safe-regex2",
+   "version": "5.1.2",
+   "purl": "pkg:npm/safe-regex2@5.1.2",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/fastify/safe-regex2"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/safe-stable-stringify@2.5.0",
+   "name": "safe-stable-stringify",
+   "version": "2.5.0",
+   "purl": "pkg:npm/safe-stable-stringify@2.5.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/BridgeAR/safe-stable-stringify#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/saxen@11.2.0",
+   "name": "saxen",
+   "version": "11.2.0",
+   "purl": "pkg:npm/saxen@11.2.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/nikku/saxen#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/scheduler@0.23.2",
+   "name": "scheduler",
+   "version": "0.23.2",
+   "purl": "pkg:npm/scheduler@0.23.2",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://reactjs.org/"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/secure-json-parse@4.1.1",
+   "name": "secure-json-parse",
+   "version": "4.1.1",
+   "purl": "pkg:npm/secure-json-parse@4.1.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "BSD-3-Clause"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/fastify/secure-json-parse#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/semver@7.8.6",
+   "name": "semver",
+   "version": "7.8.6",
+   "purl": "pkg:npm/semver@7.8.6",
+   "licenses": [
+    {
+     "license": {
+      "id": "ISC"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/npm/node-semver#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/set-cookie-parser@3.2.2",
+   "name": "set-cookie-parser",
+   "version": "3.2.2",
+   "purl": "pkg:npm/set-cookie-parser@3.2.2",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/nfriedly/set-cookie-parser"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/sonic-boom@4.2.1",
+   "name": "sonic-boom",
+   "version": "4.2.1",
+   "purl": "pkg:npm/sonic-boom@4.2.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/pinojs/sonic-boom#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/split2@4.2.0",
+   "name": "split2",
+   "version": "4.2.0",
+   "purl": "pkg:npm/split2@4.2.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "ISC"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/mcollina/split2#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/tdigest@0.1.3",
+   "name": "tdigest",
+   "version": "0.1.3",
+   "purl": "pkg:npm/tdigest@0.1.3",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/welch/tdigest"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/thread-stream@4.2.1",
+   "name": "thread-stream",
+   "version": "4.2.1",
+   "purl": "pkg:npm/thread-stream@4.2.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/mcollina/thread-stream#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/toad-cache@3.7.4",
+   "name": "toad-cache",
+   "version": "3.7.4",
+   "purl": "pkg:npm/toad-cache@3.7.4",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/kibertoad/toad-cache"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/tsx@4.23.15",
+   "name": "tsx",
+   "version": "4.23.15",
+   "purl": "pkg:npm/tsx@4.23.15",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://tsx.hirok.io"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/unzipper-esm@0.13.3",
+   "name": "unzipper-esm",
+   "version": "0.13.3",
+   "purl": "pkg:npm/unzipper-esm@0.13.3",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/catamphetamine/node-unzipper#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/worker-f@0.1.21",
+   "name": "worker-f",
+   "version": "0.1.21",
+   "purl": "pkg:npm/worker-f@0.1.21",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://gitlab.com/catamphetamine/worker-f#readme"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/xtend@4.0.2",
+   "name": "xtend",
+   "version": "4.0.2",
+   "purl": "pkg:npm/xtend@4.0.2",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/Raynos/xtend"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/yaml@2.9.1",
+   "name": "yaml",
+   "version": "2.9.1",
+   "purl": "pkg:npm/yaml@2.9.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "ISC"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://eemeli.org/yaml/"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/zod@4.6.7",
+   "name": "zod",
+   "version": "4.6.7",
+   "purl": "pkg:npm/zod@4.6.7",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://zod.dev"
+    }
+   ]
+  }
+ ]
+}

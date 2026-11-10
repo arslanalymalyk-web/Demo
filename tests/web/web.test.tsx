@@ -2,7 +2,7 @@
 import { webcrypto } from "node:crypto";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { buildAuthorizeUrl, pkceChallenge, randomString } from "../../apps/web/src/auth";
+import { authConfig, buildAuthorizeUrl, pkceChallenge, randomString } from "../../apps/web/src/auth";
 import { DataClass, LineChart, LinkClass, Status, Tornado } from "../../apps/web/src/components";
 import { ageDays, musd, num, pct } from "../../apps/web/src/format";
 import { NAV, parseRoute } from "../../apps/web/src/route";
@@ -22,6 +22,18 @@ describe("sign-in helpers", () => {
   it("builds an authorization request with S256 and no implicit flow", () => {
     const u = new URL(buildAuthorizeUrl("https://idp.example/authorize", { clientId: "web", redirectUri: "https://app.example/", state: "s", challenge: "c" }));
     expect(Object.fromEntries(u.searchParams)).toMatchObject({ response_type: "code", client_id: "web", code_challenge: "c", code_challenge_method: "S256", state: "s" });
+  });
+});
+
+describe("runtime configuration", () => {
+  it("uses the container's settings when present, and development defaults otherwise", () => {
+    window.TIGERIS_CONFIG = undefined;
+    expect(authConfig()).toEqual({ authority: "http://127.0.0.1:4010", clientId: "tigeris-web" });
+    window.TIGERIS_CONFIG = { oidcAuthority: "https://idp.client.example", oidcClientId: "tigeris-prod" };
+    expect(authConfig()).toEqual({ authority: "https://idp.client.example", clientId: "tigeris-prod" });
+    window.TIGERIS_CONFIG = { oidcAuthority: "", oidcClientId: "" };
+    expect(authConfig().authority).toBe("http://127.0.0.1:4010"); // an empty value falls back rather than breaking sign-in
+    window.TIGERIS_CONFIG = undefined;
   });
 });
 

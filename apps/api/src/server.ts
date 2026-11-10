@@ -1,4 +1,7 @@
-import Fastify, { type FastifyInstance } from "fastify";
+import { timingSafeEqual } from "node:crypto";
+import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastify";
+import { RateLimiter } from "./ratelimit.js";
+import { Counter, Gauge, Histogram, Registry, collectDefaultMetrics } from "prom-client";
 import swagger from "@fastify/swagger";
 import type pg from "pg";
 import { z } from "zod";
@@ -34,6 +37,8 @@ const rolesBody = z.object({ roles: z.array(z.string()).max(7) });
 /** Permission needed by each route. `null` means any authenticated, active principal. A route that is not listed here is refused. */
 const ACCESS: Record<string, Permission | null | "public"> = {
   "GET /health": "public",
+  "GET /ready": "public",
+  "GET /metrics": "public",
   "GET /v1/identity/me": null,
   "GET /v1/identity/principals": "identity.read",
   "POST /v1/identity/principals": "identity.manage",
@@ -95,8 +100,42 @@ declare module "fastify" { interface FastifyRequest { principal?: Principal } }
  * The institution is fixed by deployment configuration (one deployment per institution).
  * Every route except /health needs a bearer token from the institution's identity provider and a provisioned, active principal with the right role.
  */
-export function buildServer(opts: { pool: pg.Pool; institutionId: string; verifier: TokenVerifier; documents?: DocumentQueue; clientDataEnabled?: boolean }): FastifyInstance {
-  const app = Fastify({ logger: false });
+export interface ServerOptions { pool: pg.Pool; institutionId: string; verifier: TokenVerifier; documents?: DocumentQueue; clientDataEnabled?: boolean; logger?: FastifyServerOptions["logger"]; rateLimit?: { max: number; timeWindow: string } | null; metricsToken?: string | null; trustProxy?: boolean }
+
+export function buildServer(opts: ServerOptions): FastifyInstance {
+  const app = Fastify({
+    logger: opts.logger ?? false, trustProxy: opts.trustProxy === true, requestTimeout: 120_000, connectionTimeout: 30_000, bodyLimit: 1024 * 1024,
+    genReqId: req => { const h = req.headers["x-request-id"]; return typeof h === "string" && /^[A-Za-z0-9._-]{8,64}$/.test(h) ? h : crypto.randomUUID(); },
+  });
+
+  // Operations: request ids, security headers, metrics and an error handler that never shows internals.
+  const registry = new Registry();
+  collectDefaultMetrics({ register: registry });
+  const httpDuration = new Histogram({ name: "tigeris_http_request_duration_seconds", help: "Request duration", labelNames: ["method", "route", "status"], buckets: [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30], registers: [registry] });
+  const authFailures = new Counter({ name: "tigeris_auth_failures_total", help: "Refused requests by reason", labelNames: ["reason"], registers: [registry] });
+  new Gauge({ name: "tigeris_db_pool_connections", help: "Database pool connections", labelNames: ["state"], registers: [registry], collect() { this.set({ state: "total" }, opts.pool.totalCount); this.set({ state: "idle" }, opts.pool.idleCount); this.set({ state: "waiting" }, opts.pool.waitingCount); } });
+  new Gauge({ name: "tigeris_document_queue_busy", help: "1 while documents are being processed", registers: [registry], collect() { this.set(opts.documents?.busy ? 1 : 0); } });
+  app.addHook("onRequest", async (req, reply) => { reply.header("x-request-id", req.id); });
+  app.addHook("onSend", async (req, reply, payload) => {
+    reply.header("x-content-type-options", "nosniff").header("x-frame-options", "DENY").header("referrer-policy", "no-referrer").header("cross-origin-resource-policy", "same-origin");
+    if (req.url.startsWith("/v1/")) reply.header("cache-control", "no-store");
+    return payload;
+  });
+  app.addHook("onResponse", async (req, reply) => { httpDuration.observe({ method: req.method, route: req.routeOptions?.url ?? "unmatched", status: String(reply.statusCode) }, reply.elapsedTime / 1000); });
+  app.setErrorHandler((error: unknown, req, reply) => {
+    const err = error as Error & { statusCode?: number; code?: string };
+    const status = err.statusCode ?? 500;
+    if (status >= 500) { req.log.error({ err }, "unhandled error"); return reply.code(500).send({ error: "internal", message: "Something went wrong. Quote this request id to the operator.", requestId: req.id }); }
+    return reply.code(status).send({ error: err.code ?? "bad_request", message: err.message, requestId: req.id });
+  });
+  if (opts.rateLimit) {
+    const limiter = new RateLimiter(opts.rateLimit.max, 60_000);
+    app.addHook("onRequest", async (req, reply) => {
+      if (req.url === "/health" || req.url === "/ready") return;
+      const wait = limiter.check(req.ip);
+      if (wait > 0) { authFailures.inc({ reason: "rate_limited" }); return reply.code(429).header("retry-after", String(Math.ceil(wait / 1000))).send({ error: "rate_limited", message: `Too many requests. Try again in ${Math.ceil(wait / 1000)} seconds.`, requestId: req.id }); }
+    });
+  }
   void app.register(swagger, { openapi: { info: { title: "TIGERIS AI OS API", version: "0.1.0", description: "Evidence, lineage and audit. Institution scope comes from deployment configuration." } } });
   const tenant = <T>(fn: (c: pg.PoolClient) => Promise<T>) => withTenant(opts.pool, opts.institutionId, fn);
 
@@ -112,19 +151,28 @@ export function buildServer(opts: { pool: pg.Pool; institutionId: string; verifi
     if (need === "public") return;
     if (need === undefined) return reply.code(403).send({ error: "forbidden", message: "route has no access rule" });
     const m = /^Bearer (\S+)$/.exec(req.headers.authorization ?? "");
-    const unauthorized = (message: string) => reply.code(401).header("www-authenticate", 'Bearer realm="tigeris"').send({ error: "unauthorized", message });
+    const unauthorized = (message: string) => { authFailures.inc({ reason: "unauthorized" }); return reply.code(401).header("www-authenticate", 'Bearer realm="tigeris"').send({ error: "unauthorized", message }); };
     if (!m) return unauthorized("bearer token required");
     let claims;
     try { claims = await opts.verifier(m[1]!); } catch (e) { return unauthorized(e instanceof AuthError ? e.message : "invalid token"); }
     const principal = await tenant(c => findPrincipal(c, claims.issuer, claims.subject));
     if (!principal) return reply.code(403).send({ error: "not_provisioned", message: "no principal for this identity in this institution" });
-    const deny = async (reason: string) => { await tenant(c => audit(c, opts.institutionId, { actorType: "principal", actorId: principal.id, action: "identity.denied", objectType: "route", objectId: `${req.method} ${route}`, payload: { reason } })); return reply.code(403).send({ error: "forbidden", message: reason }); };
+    const deny = async (reason: string) => { authFailures.inc({ reason: "forbidden" }); await tenant(c => audit(c, opts.institutionId, { actorType: "principal", actorId: principal.id, action: "identity.denied", objectType: "route", objectId: `${req.method} ${route}`, payload: { reason } })); return reply.code(403).send({ error: "forbidden", message: reason }); };
     if (principal.disabled) return deny("principal disabled");
     if (need !== null && !permissionsOf(principal.roles).has(need)) return deny(`missing permission ${need}`);
     req.principal = principal;
   });
 
   app.get("/health", async () => ({ status: "ok" }));
+  // Readiness: can this instance serve a request that needs the database? Liveness above does not touch it.
+  app.get("/ready", async (_req, reply) => { try { await Promise.race([opts.pool.query("SELECT 1"), new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 3000))]); return { status: "ready" }; } catch { return reply.code(503).send({ status: "not_ready" }); } });
+  // Metrics have their own bearer token, so they never depend on a person's identity. Without a token the endpoint does not exist.
+  app.get("/metrics", async (req, reply) => {
+    const tok = opts.metricsToken; if (!tok) return reply.code(404).send({ error: "not_found" });
+    const given = /^Bearer (\S+)$/.exec(req.headers.authorization ?? "")?.[1] ?? "", a = Buffer.from(given), b = Buffer.from(tok);
+    if (a.length !== b.length || !timingSafeEqual(a, b)) { authFailures.inc({ reason: "metrics_token" }); return reply.code(401).header("www-authenticate", 'Bearer realm="metrics"').send({ error: "unauthorized" }); }
+    return reply.header("content-type", registry.contentType).send(await registry.metrics());
+  });
 
   app.get("/v1/identity/me", async req => {
     const inst = await tenant(async c => (await c.query("SELECT id, name, jurisdiction FROM institutions WHERE id = $1", [opts.institutionId])).rows[0]);
@@ -276,7 +324,7 @@ export function buildServer(opts: { pool: pg.Pool; institutionId: string; verifi
   app.get("/v1/cases", async (req, reply) => { const st = z.enum(["open", "analysis", "in_review", "decided", "closed"]).optional().safeParse((req.query as { state?: string }).state); return st.success ? tenant(c => listCases(c, actor(req), st.data)) : reply.code(400).send({ error: "invalid_query" }); });
   app.post("/v1/cases", async (req, reply) => { const b = caseBody.safeParse(req.body); return b.success ? domain(req, reply, c => createCase(c, opts.institutionId, actor(req), b.data), 201) : bad(reply, b.error); });
   app.get("/v1/cases/:id", async (req, reply) => { const id = idOf(req); return id.success ? domain(req, reply, c => getCase(c, actor(req), id.data)) : reply.code(400).send({ error: "invalid_id" }); });
-  const caseAction = <B,>(path: string, schema: z.ZodType<B, z.ZodTypeDef, unknown>, run: (c: pg.PoolClient, caseId: string, b: B, a: { id: string; roles: string[] }) => Promise<unknown>, okCode = 200) =>
+  const caseAction = <B,>(path: string, schema: z.ZodType<B, unknown>, run: (c: pg.PoolClient, caseId: string, b: B, a: { id: string; roles: string[] }) => Promise<unknown>, okCode = 200) =>
     app.post(`/v1/cases/:id/${path}`, async (req, reply) => { const id = idOf(req), b = schema.safeParse(req.body ?? {}); if (!id.success) return reply.code(400).send({ error: "invalid_id" }); if (!b.success) return bad(reply, b.error); return domain(req, reply, async c => (await run(c, id.data, b.data, actor(req))) ?? { ok: true }, okCode); });
   caseAction("evidence", evidenceBody, (c, id, b, a) => addEvidence(c, opts.institutionId, a, id, b), 201);
   caseAction("scenarios", z.object({ runId: z.string().uuid() }), (c, id, b, a) => addScenario(c, opts.institutionId, a, id, b.runId), 201);

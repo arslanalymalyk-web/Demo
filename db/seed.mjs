@@ -1,5 +1,8 @@
 // Creates the reference institution and the standard roles if the database has none. Prints the institution id.
 import { randomUUID } from "node:crypto";
+// A mounted secret may stand in for the variable: DATABASE_URL_OWNER_FILE=/run/secrets/...
+if (!process.env.DATABASE_URL_OWNER && process.env.DATABASE_URL_OWNER_FILE) process.env.DATABASE_URL_OWNER = (await import("node:fs")).readFileSync(process.env.DATABASE_URL_OWNER_FILE, "utf8").trim();
+
 import pg from "pg";
 const client = new pg.Client({ connectionString: process.env.DATABASE_URL_OWNER });
 await client.connect();

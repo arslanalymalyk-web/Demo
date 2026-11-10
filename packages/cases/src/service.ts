@@ -28,10 +28,17 @@ async function load(c: pg.PoolClient, actor: Actor, id: string, lock = false): P
 const requireState = (k: CaseRow, ...ok: State[]) => { if (!ok.includes(k.state)) throw new CaseError(`case is ${k.state}; this needs ${ok.join(" or ")}`, "conflict"); };
 const requireOwner = (k: CaseRow, a: Actor, what: string) => { if (k.owner_id !== a.id) throw new CaseError(`only the case owner may ${what}`, "forbidden"); };
 
-async function event(c: pg.PoolClient, inst: string, k: CaseRow, actor: Actor, kind: string, rationale: string | null, payload: Record<string, unknown> = {}, set = ""): Promise<void> {
+interface CaseUpdate { state?: State; reviewerId?: string; disposition?: string; closed?: boolean }
+async function event(c: pg.PoolClient, inst: string, k: CaseRow, actor: Actor, kind: string, rationale: string | null, payload: Record<string, unknown> = {}, upd: CaseUpdate = {}): Promise<void> {
   const seq = (await c.query("SELECT COALESCE(max(seq), 0) + 1 AS n FROM case_events WHERE case_id = $1", [k.id])).rows[0].n as number;
   await c.query("INSERT INTO case_events (institution_id, case_id, seq, actor_id, kind, rationale, payload) VALUES ($1,$2,$3,$4,$5,$6,$7)", [inst, k.id, seq, actor.id, kind, rationale, JSON.stringify(payload)]);
-  await c.query(`UPDATE cases SET version = version + 1, updated_at = now()${set} WHERE id = $1`, [k.id]);
+  // Every value goes in as a parameter; nothing is built into the SQL text.
+  const sets = ["version = version + 1", "updated_at = now()"], args: unknown[] = [k.id];
+  if (upd.state) { args.push(upd.state); sets.push("state = $" + args.length + "::case_state"); }
+  if (upd.reviewerId) { args.push(upd.reviewerId); sets.push("reviewer_id = $" + args.length + "::uuid"); }
+  if (upd.disposition) { args.push(upd.disposition); sets.push("disposition = $" + args.length); }
+  if (upd.closed) sets.push("closed_at = now()");
+  await c.query("UPDATE cases SET " + sets.join(", ") + " WHERE id = $1", args);
   await audit(c, inst, { actorType: "principal", actorId: actor.id, action: `case.${kind}`, objectType: "case", objectId: k.id, payload: { caseKey: k.case_key, ...payload } });
 }
 
@@ -82,7 +89,7 @@ export async function addScenario(c: pg.PoolClient, inst: string, actor: Actor, 
 export async function startAnalysis(c: pg.PoolClient, inst: string, actor: Actor, caseId: string): Promise<void> {
   const k = await load(c, actor, caseId, true); requireOwner(k, actor, "start analysis"); requireState(k, "open");
   if (!(await c.query("SELECT 1 FROM case_evidence WHERE case_id = $1", [caseId])).rowCount) throw new CaseError("attach at least one evidence record before starting analysis", "conflict");
-  await event(c, inst, k, actor, "analysis_started", null, {}, ", state = 'analysis'");
+  await event(c, inst, k, actor, "analysis_started", null, {}, { state: "analysis" });
 }
 
 export async function addRecommendation(c: pg.PoolClient, inst: string, actor: Actor, caseId: string, i: { title: string; description: string; actionClass: ActionClass; constraints?: string; scenarioRunId?: string; evidenceIds: string[]; ownerId?: string }): Promise<{ id: string }> {
@@ -130,7 +137,7 @@ export async function submitForReview(c: pg.PoolClient, inst: string, actor: Act
   if (evaluations.some(e => e.outcome !== "PASS")) return { submitted: false, evaluations };
   await c.query("UPDATE recommendations SET status = 'submitted' WHERE id = ANY($1::uuid[])", [recs.map(r => r.id)]);
   await c.query("INSERT INTO case_participants (institution_id, case_id, principal_id, role) VALUES ($1,$2,$3,'reviewer') ON CONFLICT (case_id, principal_id) DO UPDATE SET role = 'reviewer'", [inst, caseId, rv.id]);
-  await event(c, inst, k, actor, "submitted_for_review", null, { reviewerId: rv.id, recommendationIds: recs.map(r => r.id) }, `, state = 'in_review', reviewer_id = '${rv.id}'`);
+  await event(c, inst, k, actor, "submitted_for_review", null, { reviewerId: rv.id, recommendationIds: recs.map(r => r.id) }, { state: "in_review", reviewerId: rv.id });
   return { submitted: true, evaluations };
 }
 
@@ -159,7 +166,7 @@ export async function decide(c: pg.PoolClient, inst: string, actor: Actor, caseI
   }
   const open = Number((await c.query("SELECT count(*) FROM recommendations WHERE case_id = $1 AND status = 'submitted'", [caseId])).rows[0].count);
   const next: State = open > 0 ? "in_review" : closing ? "decided" : "analysis";
-  await event(c, inst, k, actor, `decision_${i.decision}`, i.rationale.trim(), { recommendationId: rec.id, decisionId: hd.id, policyOutcome: pd.outcome, policyVersion: pd.policyVersion, handoffId }, next === k.state ? "" : `, state = '${next}'`);
+  await event(c, inst, k, actor, `decision_${i.decision}`, i.rationale.trim(), { recommendationId: rec.id, decisionId: hd.id, policyOutcome: pd.outcome, policyVersion: pd.policyVersion, handoffId }, next === k.state ? {} : { state: next });
   return { decisionId: hd.id, policyOutcome: pd.outcome, caseState: next, handoffId };
 }
 
@@ -177,7 +184,7 @@ export async function closeCase(c: pg.PoolClient, inst: string, actor: Actor, ca
   const k = await load(c, actor, caseId, true); requireOwner(k, actor, "close the case"); requireState(k, "open", "analysis", "decided");
   if (i.rationale.trim().length < 10) throw new CaseError("a rationale of at least 10 characters is required", "invalid");
   if (k.state !== "decided") {
-    await event(c, inst, k, actor, "closed", i.rationale.trim(), { disposition: "dismissed" }, ", state = 'closed', disposition = 'dismissed', closed_at = now()");
+    await event(c, inst, k, actor, "closed", i.rationale.trim(), { disposition: "dismissed" }, { state: "closed", disposition: "dismissed", closed: true });
     return { disposition: "dismissed", memoryId: null };
   }
   const hs = await handoffsFor(c, caseId);
@@ -192,7 +199,7 @@ export async function closeCase(c: pg.PoolClient, inst: string, actor: Actor, ca
   const m = await c.query("INSERT INTO memory_records (institution_id, case_id, decision_id, title, summary, domain, sensitivity, decision, outcome) VALUES ($1,$2,$3,$4,$5,$6,$7::case_sensitivity,$8::decision_kind,$9) RETURNING id",
     [inst, caseId, last.id, k.title, summary, k.domain, k.sensitivity, last.decision, outcome]);
   const disposition = last.decision === "approve" ? "approved" : "rejected";
-  await event(c, inst, k, actor, "closed", i.rationale.trim(), { disposition, memoryId: m.rows[0].id }, `, state = 'closed', disposition = '${disposition}', closed_at = now()`);
+  await event(c, inst, k, actor, "closed", i.rationale.trim(), { disposition, memoryId: m.rows[0].id }, { state: "closed", disposition, closed: true });
   return { disposition, memoryId: m.rows[0].id };
 }
 

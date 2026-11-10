@@ -1,6 +1,11 @@
 // Authorization code flow with PKCE against the institution's identity provider. The access token lives in memory only.
 export interface AuthConfig { authority: string; clientId: string }
-export const authConfig = (): AuthConfig => ({ authority: import.meta.env.VITE_OIDC_AUTHORITY ?? "http://127.0.0.1:4010", clientId: import.meta.env.VITE_OIDC_CLIENT_ID ?? "tigeris-web" });
+declare global { interface Window { TIGERIS_CONFIG?: { oidcAuthority?: string; oidcClientId?: string } } }
+/** The container's proxy writes /config.js at start from its environment, so one image serves any institution. Vite settings are for development. */
+export const authConfig = (): AuthConfig => ({
+  authority: window.TIGERIS_CONFIG?.oidcAuthority || import.meta.env.VITE_OIDC_AUTHORITY || "http://127.0.0.1:4010",
+  clientId: window.TIGERIS_CONFIG?.oidcClientId || import.meta.env.VITE_OIDC_CLIENT_ID || "tigeris-web",
+});
 
 const b64url = (bytes: Uint8Array): string => btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 export const randomString = (n = 48): string => b64url(crypto.getRandomValues(new Uint8Array(n)));

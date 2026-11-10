@@ -1,5 +1,8 @@
 // Applies db/migrations/*.sql in order using the owner role. Records applied files.
 import { readdirSync, readFileSync } from "node:fs";
+// A mounted secret may stand in for the variable: DATABASE_URL_OWNER_FILE=/run/secrets/...
+if (!process.env.DATABASE_URL_OWNER && process.env.DATABASE_URL_OWNER_FILE) process.env.DATABASE_URL_OWNER = (await import("node:fs")).readFileSync(process.env.DATABASE_URL_OWNER_FILE, "utf8").trim();
+
 import pg from "pg";
 const client = new pg.Client({ connectionString: process.env.DATABASE_URL_OWNER });
 await client.connect();

@@ -1,8 +1,10 @@
+import { applyFileSecrets } from "../../core/src/secrets.js";
 import pg from "pg";
 import { withTenant } from "../../ingest/src/store.js";
 import { listPrincipals, provisionPrincipal } from "./store.js";
 
 const [cmd, ...rest] = process.argv.slice(2);
+applyFileSecrets();
 const institutionId = process.env.TIGERIS_INSTITUTION_ID;
 if (!process.env.DATABASE_URL || !institutionId) { console.error("DATABASE_URL and TIGERIS_INSTITUTION_ID are required"); process.exit(2); }
 const opt = (n: string) => { const i = rest.indexOf(`--${n}`); return i >= 0 ? rest[i + 1] : undefined; };

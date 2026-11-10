@@ -1,0 +1,114 @@
+# Single-node deployment on the client's own infrastructure. One deployment per institution.
+#   cp .env.example .env   (fill it in)      mkdir secrets && see secrets/README for the files        place TLS files in ./tls
+#   docker compose build && docker compose up -d
+# The API and database sit on an internal network with no route out. The proxy is the only published service.
+# Scheduled ingestion runs as a separate, short-lived container that is the only one allowed to reach the public data sources.
+name: tigeris
+
+networks:
+  backend: { internal: true }        # database, API and proxy talk here. No outbound route.
+  idp: {}                            # lets the API reach the institution's identity provider for signing keys. Restrict it with the client's network policy to that one host.
+  egress: {}                         # used only by the ingest job. Restrict it to the allowlisted source hosts.
+
+secrets:
+  db_owner_password: { file: ./secrets/db_owner_password }
+  db_app_password: { file: ./secrets/db_app_password }
+  db_owner_url: { file: ./secrets/db_owner_url }          # postgres://tigeris_owner:...@db:5432/tigeris
+  db_app_url: { file: ./secrets/db_app_url }              # postgres://tigeris_app:...@db:5432/tigeris
+  postgres_password: { file: ./secrets/postgres_password }
+  metrics_token: { file: ./secrets/metrics_token }
+  backup_key: { file: ./secrets/backup_key }
+
+volumes:
+  pgdata: {}
+
+x-hardening: &hardening
+  restart: unless-stopped
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: ["ALL"]
+  logging: { driver: json-file, options: { max-size: "20m", max-file: "10" } }
+
+services:
+  db:
+    <<: *hardening
+    build: { context: ../.., dockerfile: deploy/db/Dockerfile }
+    cap_drop: ["ALL"]
+    cap_add: ["CHOWN", "SETUID", "SETGID", "FOWNER", "DAC_OVERRIDE"]
+    environment:
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      OWNER_PASSWORD_FILE: /run/secrets/db_owner_password
+      APP_PASSWORD_FILE: /run/secrets/db_app_password
+      TIGERIS_BACKUP_ENV: /etc/tigeris/backup.env
+    secrets: [postgres_password, db_owner_password, db_app_password, backup_key]
+    command: >
+      postgres -c wal_level=replica -c archive_mode=on -c archive_timeout=300
+      -c "archive_command=/opt/tigeris/backup/archive-wal.sh %p %f"
+      -c password_encryption=scram-sha-256 -c log_connections=on -c log_disconnections=on -c ssl=off
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ../db/init-roles.sh:/docker-entrypoint-initdb.d/10-roles.sh:ro
+      - ../backup:/opt/tigeris/backup:ro
+      - ./backup.env:/etc/tigeris/backup.env:ro
+      - ${BACKUP_DIR:?set BACKUP_DIR in .env}:/backups
+    networks: [backend]
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U postgres -d tigeris"], interval: 10s, timeout: 5s, retries: 12 }
+
+  migrate:
+    build: { context: ../.., dockerfile: Dockerfile, target: app }
+    restart: "no"
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    environment: { DATABASE_URL_OWNER_FILE: /run/secrets/db_owner_url }
+    secrets: [db_owner_url]
+    entrypoint: ["node", "db/migrate.mjs"]
+    networks: [backend]
+    depends_on: { db: { condition: service_healthy } }
+
+  app:
+    <<: *hardening
+    build: { context: ../.., dockerfile: Dockerfile, target: app }
+    read_only: true
+    tmpfs: ["/tmp:size=512m,mode=1777"]          # document extraction works here and is cleared on restart
+    environment:
+      TIGERIS_INSTITUTION_ID: ${TIGERIS_INSTITUTION_ID:?set TIGERIS_INSTITUTION_ID}
+      DATABASE_URL_FILE: /run/secrets/db_app_url
+      METRICS_TOKEN_FILE: /run/secrets/metrics_token
+      OIDC_ISSUER: ${OIDC_ISSUER:?}
+      OIDC_AUDIENCE: ${OIDC_AUDIENCE:-tigeris-api}
+      OIDC_JWKS_URI: ${OIDC_JWKS_URI:?}
+      TIGERIS_TRUST_PROXY: "true"
+      TIGERIS_CLIENT_DATA_ENABLED: ${TIGERIS_CLIENT_DATA_ENABLED:-false}
+      TIGERIS_CLIENT_DATA_REVIEW_DONE: ${TIGERIS_CLIENT_DATA_REVIEW_DONE:-false}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    secrets: [db_app_url, metrics_token]
+    networks: [backend, idp]
+    depends_on: { migrate: { condition: service_completed_successfully } }
+
+  proxy:
+    <<: *hardening
+    build: { context: ../.., dockerfile: Dockerfile, target: web }
+    cap_drop: ["ALL"]
+    environment:
+      SERVER_NAME: ${SERVER_NAME:?set SERVER_NAME}
+      OIDC_AUTHORITY: ${OIDC_AUTHORITY:?set OIDC_AUTHORITY (https://...)}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-tigeris-web}
+      API_UPSTREAM: http://app:3000
+    ports: ["80:8080", "443:8443"]
+    volumes: ["./tls:/etc/nginx/tls:ro"]
+    networks: [backend, default]
+    depends_on: [app]
+
+  # Run on a schedule from the host:  docker compose run --rm ingest --source <source-key>
+  ingest:
+    profiles: ["ingest"]
+    build: { context: ../.., dockerfile: Dockerfile, target: app }
+    restart: "no"
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    read_only: true
+    tmpfs: ["/tmp"]
+    environment: { TIGERIS_INSTITUTION_ID: "${TIGERIS_INSTITUTION_ID:-}", DATABASE_URL_FILE: /run/secrets/db_app_url }
+    secrets: [db_app_url]
+    entrypoint: ["node", "--use-env-proxy", "--import", "tsx", "packages/ingest/src/cli.ts"]
+    networks: [backend, egress]
+    depends_on: { db: { condition: service_healthy } }
