@@ -5,3 +5,5 @@ coverage
 *.log
 *.tsbuildinfo
 dist-offline
+test-results/
+playwright-report/

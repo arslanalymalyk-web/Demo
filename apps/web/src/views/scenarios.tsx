@@ -25,7 +25,7 @@ const metricLabel = (m: string): string => LABEL[m] ?? (m.startsWith("revenue_de
 export function Scenarios({ can }: { can: (p: string) => boolean }): ReactNode {
   const tpl = useApi<TemplateInfo[]>("/v1/scenarios/templates");
   const runs = useApi<RunSummary[]>("/v1/scenarios/runs");
-  const bt = useApi<Backtest>("/v1/scenarios/backtest");
+  const bt = useApi<Backtest | { available: false; reason: string }>("/v1/scenarios/backtest");
   return (
     <>
       <PageHead title="Scenarios" aside={<SimulationBadge />}>Deterministic calculators run over four horizons. Every parameter shows whether it is assumed, sourced or calibrated, and every result carries a range and a replayable record.</PageHead>
@@ -38,7 +38,7 @@ export function Scenarios({ can }: { can: (p: string) => boolean }): ReactNode {
           )}</Async>
         </Card>
         <Card title="Back-test of the Mar–May 2026 episode" aside={<span className="badge b-warn">In-sample</span>}>
-          <Async state={bt}>{b => <>
+          <Async state={bt}>{b => "available" in b ? <div className="note" role="status">{b.reason}</div> : <>
             <p className="small">{b.statement}</p>
             <Table label="Back-test"><thead><tr><th>Month</th><th className="num">Lost kb/d</th><th className="num">Observed</th><th className="num">Model</th></tr></thead>
               <tbody>{b.rows.map(r => <tr key={r.month}><td style={{ whiteSpace: "nowrap" }}>{r.month}</td><td className="num">{num(r.lostKbd, 0)}</td><td className="num">{pct(r.observedPremium, 1)}</td><td className="num">{pct(r.modelPremium, 1)}</td></tr>)}</tbody></Table>

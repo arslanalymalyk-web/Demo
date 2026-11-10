@@ -6,7 +6,7 @@ import swagger from "@fastify/swagger";
 import type pg from "pg";
 import { z } from "zod";
 import { PostgresGraph } from "../../../packages/graph/src/index.js";
-import { EPISODE, PACKS, TEMPLATES, createRun, episodeBacktest, getRun, listRuns, replayRun } from "../../../packages/scenario/src/index.js";
+import { EPISODE, PACKS, TEMPLATES, createRun, episodeBacktestIfStored, getRun, listRuns, replayRun } from "../../../packages/scenario/src/index.js";
 import { AuthError, IdentityError, findPrincipal, listPrincipals, permissionsOf, provisionPrincipal, setDisabled, setRoles, type Permission, type Principal, type TokenVerifier } from "../../../packages/identity/src/index.js";
 import { audit } from "../../../packages/ingest/src/store.js";
 import { CaseError, addEvidence, addParticipant, addRecommendation, openCaseFromSignal, addScenario, closeCase, createCase, decide, getCase, listCases, listHandoffs, searchMemory, startAnalysis, submitForReview, updateHandoff } from "../../../packages/cases/src/index.js";
@@ -306,7 +306,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
 
   app.get("/v1/scenarios/templates", async () => Object.values(TEMPLATES).map(t => ({ key: t.key, pack: t.pack, packName: PACKS[t.pack], version: t.version, formulaVersion: t.formulaVersion, title: t.title, description: t.description, needs: t.needs, headline: t.headline, parameters: t.defaults(t.usesFlexibility ? null : null) })));
 
-  app.get("/v1/scenarios/backtest", async () => tenant(c => episodeBacktest(c, opts.institutionId, EPISODE.baseline, EPISODE.months, 100000)));
+  app.get("/v1/scenarios/backtest", async () => tenant(async c => (await episodeBacktestIfStored(c, opts.institutionId)) ?? { available: false, reason: "The stored records and the graph do not yet cover March to May 2026, so the back-test cannot be shown. Source not connected for those months." }));
 
   app.post("/v1/scenarios/runs", async (req, reply) => {
     const b = runBody.safeParse(req.body);

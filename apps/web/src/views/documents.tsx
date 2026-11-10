@@ -33,7 +33,7 @@ export function Documents({ can }: { can: (p: string) => boolean }): ReactNode {
         {c.scanner.configured && !c.scanner.reachable ? <div className="note err" role="alert">The malware scanner is not answering. New uploads are held, unopened, and retried until it is back.</div> : null}
         {!c.scanner.configured ? <div className="note" role="status">No malware scanner is connected to this deployment, so uploaded files are not scanned. Institution documents cannot be uploaded until one is.</div> : <div className="small muted" style={{ marginBottom: 8 }}>Malware scanner: {c.scanner.engine} · {c.scanner.reachable ? c.scanner.version : "not answering"}.{c.scan.pending + c.scan.error > 0 ? ` ${c.scan.pending + c.scan.error} waiting for a scan.` : ""}</div>}
       </>}</Async>
-      {can("document.upload") ? <Async state={cfg}>{c => <UploadForm cfg={c} onDone={list.reload} />}</Async> : <div className="note">Your role can read documents but not add them.</div>}
+      {can("document.upload") ? <Async state={cfg}>{c => <UploadForm cfg={c} onDone={() => { list.reload(); cfg.reload(); }} />}</Async> : <div className="note">Your role can read documents but not add them.</div>}
       <form className="row" style={{ margin: "18px 0 14px" }} onSubmit={e => { e.preventDefault(); setTerm(q.trim()); }}>
         <label>Search inside documents<input type="search" minLength={2} value={q} onChange={e => setQ(e.target.value)} placeholder="Kuwait, برنت, reserves…" dir="auto" /></label><button style={{ alignSelf: "flex-end" }}>Search</button>
       </form>
@@ -63,8 +63,8 @@ function UploadForm({ cfg, onDone }: { cfg: DocConfig; onDone: () => void }): Re
     e.preventDefault(); const picked = file.current?.files?.[0]; if (!picked) return;
     setBusy(true); setErr(null); setMsg(null);
     try {
-      const r = await upload<{ id: string; duplicate: boolean }>("/v1/documents", picked, { "x-filename": picked.name, "x-title": f.title, "x-data-class": f.dataClass, "x-original-agency": f.agency, "x-rights": f.rights, "x-source-url": f.sourceUrl, "x-languages": f.lang });
-      setMsg(r.body.duplicate ? "This exact file is already stored. Showing the existing record in the list." : "Uploaded. It is being read now."); if (file.current) file.current.value = ""; setF({ ...f, title: "" }); onDone();
+      const r = await upload<{ id: string; duplicate: boolean; scanStatus?: string }>("/v1/documents", picked, { "x-filename": picked.name, "x-title": f.title, "x-data-class": f.dataClass, "x-original-agency": f.agency, "x-rights": f.rights, "x-source-url": f.sourceUrl, "x-languages": f.lang });
+      if (r.body.scanStatus === "infected") setErr("The malware scanner flagged this file. It was recorded, but its contents were not kept or opened, and it cannot be downloaded."); else setMsg(r.body.duplicate ? "This exact file is already stored. Showing the existing record in the list." : r.body.scanStatus === "pending" || r.body.scanStatus === "error" ? "Uploaded. It is waiting for a malware scan and stays unopened until one passes." : "Uploaded. It is being read now."); if (file.current) file.current.value = ""; setF({ ...f, title: "" }); onDone();
     } catch (x) { setErr(x instanceof ApiError ? x.message : "The upload failed."); } finally { setBusy(false); }
   }
   return (

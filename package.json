@@ -11,6 +11,7 @@
     "lint:wording": "node scripts/check-wording.mjs",
     "typecheck": "tsc -b && tsc -p apps/web",
     "test": "vitest run",
+    "e2e": "playwright test",
     "check": "pnpm lint:wording && pnpm typecheck && pnpm test",
     "migrate": "node --env-file=.env db/migrate.mjs",
     "ingest": "node --use-env-proxy --env-file=.env --import tsx packages/ingest/src/cli.ts",
@@ -28,6 +29,7 @@
     "audit": "pnpm audit --audit-level high"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "@testing-library/dom": "10.4.0",
     "@testing-library/react": "16.1.0",
     "@types/node": "^22.10.0",

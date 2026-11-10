@@ -33,6 +33,14 @@ jobs:
         env:
           DATABASE_URL_OWNER: ${{ env.DATABASE_URL_OWNER }}
       - run: pnpm check
+      - name: Browser end-to-end suite (real API, real database, local identity provider)
+        run: |
+          pnpm exec playwright install --with-deps chromium
+          pnpm e2e
+      - name: Keep the browser report when the suite fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with: { name: playwright-report, path: "playwright-report/\ntest-results/" }
 
   images:
     runs-on: ubuntu-latest

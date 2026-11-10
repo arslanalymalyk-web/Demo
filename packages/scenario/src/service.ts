@@ -17,14 +17,14 @@ export async function latestBaselineMonth(c: pg.PoolClient): Promise<string> {
   if (r.rows[0]?.t) return monthOf(new Date(r.rows[0].t).toISOString());
   const q = await c.query(`SELECT max(f.valid_time) AS t FROM evidence_facts f JOIN series s ON s.id = f.series_id WHERE s.series_key = $1`, [RESERVES]);
   if (q.rows[0]?.t) return monthOf(new Date(q.rows[0].t).toISOString());
-  throw new Error("no stored observations to build a baseline from; ingest the series first");
+  throw new MissingHistoryError("no stored observations to build a baseline from; ingest the series first");
 }
 
 /** Reads the baseline for a month from stored evidence. Exposure and bypass capacity come from the graph's links and keep their link class. */
 async function loadGulf(c: pg.PoolClient, institutionId: string, month: string): Promise<Baseline> {
   const g = new PostgresGraph(c, institutionId);
   const links = await g.linked("chokepoint:hormuz", "constrains_exports_of").catch(e => { if (e instanceof Error && e.message.startsWith("unknown entity")) return []; throw e; });
-  if (links.length === 0) throw new Error("graph has no Hormuz structure; seed it first");
+  if (links.length === 0) throw new MissingHistoryError("graph has no Hormuz structure; seed it first");
   const at = monthStart(month);
   const subjects = links.flatMap(l => [String(l.attrs.exportsSubject), String(l.attrs.productionSubject)]);
   const facts = await readObservations(c, JODI, { subjects, from: at, to: at });
@@ -35,9 +35,9 @@ async function loadGulf(c: pg.PoolClient, institutionId: string, month: string):
     if (!ex || !pr) continue; // a country without observations for the month is left out rather than guessed
     countries.push({ code: String(l.attrs.code), name: l.name, exportsKbd: ex.value, productionKbd: pr.value, hormuzShare: Number(l.params.hormuzShare), spareBypassKbd: Number(l.params.spareBypassKbd), linkClass: l.linkClass, refs: [ref(ex), ref(pr)] });
   }
-  if (countries.length === 0) throw new Error(`no export observations for ${month}`);
+  if (countries.length === 0) throw new MissingHistoryError(`no export observations for ${month}`);
   const brent = await readObservations(c, IMF, { subjects: [`${IMF}|commodity=POILBRE`], from: at, to: at });
-  if (!brent[0]) throw new Error(`no Brent price for ${month}`);
+  if (!brent[0]) throw new MissingHistoryError(`no Brent price for ${month}`);
   const res = (await readObservations(c, RESERVES, { subjects: [`${RESERVES}|Reserve Assets=Total Reserves Assets`], to: at })).at(-1) ?? null;
   return { month, priceUsd: brent[0].value, priceRef: ref(brent[0]), countries, reservesMillionSar: res?.value ?? null, reservesRef: res ? ref(res) : null };
 }
@@ -77,12 +77,15 @@ export async function loadBaseline(c: pg.PoolClient, institutionId: string, mont
 }
 
 /** Observed episode: exports lost against the baseline month, and the Brent price in each episode month. */
+export class MissingHistoryError extends Error { constructor(message: string) { super(message); } }
+
 export async function episodeBacktest(c: pg.PoolClient, institutionId: string, baselineMonth: string, episode: string[], globalSupplyKbd: number): Promise<Backtest> {
   const base = await loadBaseline(c, institutionId, baselineMonth);
+  if (base.priceUsd === null) throw new MissingHistoryError(`no Brent price is stored for ${baselineMonth}`);
   const months = [];
   for (const m of episode) {
     const b = await loadBaseline(c, institutionId, m);
-    if (b.priceUsd === null) throw new Error("no Brent price");
+    if (b.priceUsd === null) throw new MissingHistoryError(`no Brent price is stored for ${m}`);
     const lost = base.countries.reduce((a, c0) => a + Math.max(0, c0.exportsKbd - (b.countries.find(x => x.code === c0.code)?.exportsKbd ?? c0.exportsKbd)), 0);
     months.push({ month: m, lostKbd: lost, observedPrice: b.priceUsd });
   }
@@ -94,9 +97,13 @@ export const EPISODE = { baseline: "2026-02", months: ["2026-03", "2026-04", "20
 export interface RunRequest { templateKey: string; overrides?: Record<string, number>; baselineMonth?: string; createdBy: string; today?: Date; settings?: DefaultsOverride }
 export interface StoredRun extends RunOutput { id: string; manifestHash: string; resultsHash: string; baseline: Baseline; graphHash: string | null; created: string }
 
-async function calibratedFlexibility(c: pg.PoolClient, institutionId: string): Promise<{ flex: number | null; test: Backtest }> {
-  const test = await episodeBacktest(c, institutionId, EPISODE.baseline, EPISODE.months, 100000);
-  return { flex: test.flexibility, test };
+/** The back-test, or null when the stored records do not cover the episode. A deployment without that history says so; it does not fail. */
+export async function episodeBacktestIfStored(c: pg.PoolClient, institutionId: string): Promise<Backtest | null> {
+  try { return await episodeBacktest(c, institutionId, EPISODE.baseline, EPISODE.months, 100000); }
+  catch (e) { if (e instanceof MissingHistoryError) return null; throw e; }
+}
+async function calibratedFlexibility(c: pg.PoolClient, institutionId: string): Promise<{ flex: number | null }> {
+  return { flex: (await episodeBacktestIfStored(c, institutionId))?.flexibility ?? null };
 }
 
 export async function createRun(c: pg.PoolClient, institutionId: string, req: RunRequest): Promise<StoredRun> {

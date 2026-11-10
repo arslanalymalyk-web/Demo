@@ -1,1 +1,1 @@
-{ "extends": "./tsconfig.base.json", "include": ["packages/*/src/**/*.ts", "apps/api/src/**/*.ts", "tests/**/*.ts"], "exclude": ["tests/web/**"] }
+{ "extends": "./tsconfig.base.json", "include": ["packages/*/src/**/*.ts", "apps/api/src/**/*.ts", "tests/**/*.ts", "e2e/**/*.ts", "playwright.config.ts"], "exclude": ["tests/web/**"] }

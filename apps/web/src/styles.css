@@ -177,3 +177,6 @@ svg.map .edge.flow { stroke-dasharray: 6 6; }
 .brief-changes .l { color: var(--ink-2); min-width: 190px; }
 .brief-foot { margin-top: 28px; word-break: break-all; }
 @media print { .rail, .top, .no-print { display: none !important; } .content { padding: 0; max-width: none; animation: none; } .brief-sec, .brief-head { animation: none; break-inside: avoid; } body { background: #fff; } }
+
+/* a table inside a stacked form scrolls within its own box instead of widening the page */
+form.stack > .tablewrap { align-self: stretch; max-width: 100%; min-width: 0; }
