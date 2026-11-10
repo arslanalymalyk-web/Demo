@@ -7,14 +7,14 @@ const DOMAINS: Record<"energy" | "sovereign", string[]> = { energy: ["energy"], 
 const PACK_TEMPLATES: Record<"energy" | "sovereign", string> = { energy: "energy", sovereign: "sovereign" };
 
 function sar(v: number): string { return v >= 1_000_000 ? `SAR ${num(v / 1_000_000, 2)} trillion` : v >= 1000 ? `SAR ${num(v / 1000, 1)} billion` : `SAR ${num(v, 0)} million`; }
-function show(f: Figure): string {
+export function show(f: { unit: string; value: number }): string {
   if (f.unit === "US$ per barrel") return `US$ ${num(f.value, 1)}`;
   if (f.unit === "thousand barrels per day") return `${num(f.value, 0)} kb/d`;
   if (f.unit === "million SAR") return sar(f.value);
   if (f.unit.startsWith("%")) return `${num(f.value, 1)}%`;
   return num(f.value, 1);
 }
-const ARROW = { up: "▲", down: "▼", flat: "▬" } as const;
+export const ARROW = { up: "▲", down: "▼", flat: "▬" } as const;
 
 function FigureCard({ f }: { f: Figure }): ReactNode {
   return (

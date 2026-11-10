@@ -14,7 +14,7 @@ import { GovernanceError, activatePolicy, createPolicyDraft, listPolicies } from
 import { IntakeError, tools as docTools, downloadDocument, getDocument, getPage, listDocuments, retryDocument, searchDocuments, submitDocument, type DocumentQueue } from "../../../packages/documents/src/index.js";
 import { RetentionError, exportCase, holdFor, placeHold, releaseHold, retentionReport } from "../../../packages/retention/src/index.js";
 import { SCOPES, SCOPE_INFO, DEFAULT_SIGNAL_RULES, SettingsError, activate as activateSetting, activeOf, createDraft as createSettingDraft, effectiveScenarioDefaults, effectiveThresholds, listVersions as listSettings, type Scope } from "../../../packages/settings/src/index.js";
-import { SECTORS, buildMap, buildSector, isPack } from "../../../packages/sectors/src/index.js";
+import { SECTORS, buildMap, buildSector, composeBriefing, isPack, type BriefingCase, type BriefingRun } from "../../../packages/sectors/src/index.js";
 import { getLineage, verifyAuditChain } from "../../../packages/ingest/src/lineage.js";
 import { withTenant } from "../../../packages/ingest/src/store.js";
 
@@ -74,6 +74,7 @@ const ACCESS: Record<string, Permission | null | "public"> = {
   "GET /v1/map": "graph.read",
   "GET /v1/sectors": "series.read",
   "GET /v1/sectors/:pack": "series.read",
+  "GET /v1/briefings/:pack": "series.read",
   "POST /v1/sectors/:pack/signals/:id/case": "case.write",
   "GET /v1/documents/search": "document.read",
   "GET /v1/documents/config": "document.read",
@@ -403,6 +404,18 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   // Sector command centres. Everything shown is computed from stored evidence; a signal can open a case with its own evidence attached.
   app.get("/v1/sectors", async () => Object.entries(SECTORS).map(([key, p]) => ({ key, name: p.name, domains: p.domains })));
   app.get("/v1/sectors/:pack", async (req, reply) => { const k = (req.params as { pack: string }).pack; return isPack(k) ? tenant(async c => buildSector(c, k, new Date(), await effectiveThresholds(c))) : reply.code(404).send({ error: "not_found" }); });
+  // Executive briefing: composed by fixed code from the sector view, the cases and scenario runs this reader may see. Carries a content hash so a saved copy can be checked.
+  app.get("/v1/briefings/:pack", async (req, reply) => {
+    const k = (req.params as { pack: string }).pack;
+    if (!isPack(k)) return reply.code(404).send({ error: "not_found" });
+    const perms = permissionsOf(req.principal!.roles);
+    return tenant(async c => composeBriefing({
+      view: await buildSector(c, k, new Date(), await effectiveThresholds(c)),
+      cases: perms.has("case.read") ? (await listCases(c, actor(req))) as BriefingCase[] : null,
+      runs: perms.has("scenario.read") ? (await listRuns(c)) as BriefingRun[] : null,
+      templates: Object.values(TEMPLATES).map(t => ({ key: t.key, pack: t.pack, title: t.title })), viewerId: req.principal!.id,
+    }));
+  });
   app.post("/v1/sectors/:pack/signals/:id/case", async (req, reply) => {
     const { pack, id } = req.params as { pack: string; id: string };
     if (!isPack(pack)) return reply.code(404).send({ error: "not_found" });

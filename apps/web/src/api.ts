@@ -104,3 +104,14 @@ export interface MapData { extent: { lonMin: number; lonMax: number; latMin: num
 
 export interface RetentionHold { id: string; caseId: string; caseKey: string; reason: string; placedBy: string; placedAt: string; releasedBy: string | null; releasedAt: string | null; releaseReason: string | null }
 export interface RetentionReport { years: number; reviewHorizon: string; classes: { key: string; label: string; basis: string; records: number; oldest: string | null; newest: string | null; reviewDue: number }[]; holds: RetentionHold[]; exports: { id: string; subjectId: string; exportedBy: string; exportedAt: string; sha256: string; bytes: number; purpose: string }[]; deletion: string; note: string }
+
+export interface Briefing {
+  version: 1; pack: "energy" | "sovereign"; name: string; asOf: string; rulesVersion: string; settingsVersion: number | null;
+  headline: { level: "attention" | "watch" | "clear" | "no_data"; text: string };
+  changes: { id: string; label: string; value: number; unit: string; period: string; change: string; direction: "up" | "down" | "flat"; evidenceId: string }[];
+  signals: { id: string; ruleId: string; severity: "info" | "watch" | "alert"; title: string; detail: string; observedAt: string; evidenceIds: string[]; caseId: string | null; caseKey: string | null }[];
+  openCases: { id: string; caseKey: string; title: string; state: string; updatedAt: string; waitingFor: "reviewer" | null }[] | null;
+  scenarios: { key: string; title: string; runId: string | null; confidence: string | null; ranAt: string | null; label: "Scenario simulation" }[] | null;
+  caveats: { kind: "stale" | "lagging" | "unvalidated" | "note"; text: string; evidenceId: string | null }[];
+  dataClass: "public_record"; contentHash: string;
+}

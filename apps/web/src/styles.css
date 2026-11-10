@@ -164,3 +164,16 @@ svg.map { display: block; width: 100%; height: auto; aspect-ratio: 1000 / 739; t
 .m-prop { fill: none; stroke-linecap: round; } .m-prop.loss { stroke: var(--amber); } .m-prop.gain { stroke: var(--teal); }
 svg.map .edge.flow { stroke-dasharray: 6 6; }
 .layers { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; } .layers .check { align-items: flex-start; }
+
+/* executive briefing */
+.brief { max-width: 880px; }
+.brief-head { border: 1px solid var(--line); border-inline-start: 4px solid var(--gold); background: var(--paper); border-radius: var(--radius); padding: 16px 20px; margin-bottom: 8px; animation: rise .5s ease both; }
+.brief-head p { font-family: var(--serif); font-size: 1.5rem; line-height: 1.3; margin: 8px 0; }
+.brief-head.level-attention { border-inline-start-color: var(--red); } .brief-head.level-clear { border-inline-start-color: var(--emerald); }
+.brief-sec { margin-top: 24px; padding-top: 14px; border-top: 1px solid var(--line); animation: rise .5s ease both; }
+.brief-sec h2 { font-size: 1.05rem; margin: 0 0 10px; }
+.brief ul.plain { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.brief-changes li { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+.brief-changes .l { color: var(--ink-2); min-width: 190px; }
+.brief-foot { margin-top: 28px; word-break: break-all; }
+@media print { .rail, .top, .no-print { display: none !important; } .content { padding: 0; max-width: none; animation: none; } .brief-sec, .brief-head { animation: none; break-inside: avoid; } body { background: #fff; } }

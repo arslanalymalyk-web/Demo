@@ -1,4 +1,4 @@
-export interface Route { view: "home" | "sources" | "evidence" | "series" | "graph" | "scenarios" | "run" | "audit" | "admin" | "cases" | "case" | "handoffs" | "memory" | "policy" | "documents" | "document" | "sector" | "settings" | "map" | "retention" | "missing"; id: string | null }
+export interface Route { view: "home" | "sources" | "evidence" | "series" | "graph" | "scenarios" | "run" | "audit" | "admin" | "cases" | "case" | "handoffs" | "memory" | "policy" | "documents" | "document" | "sector" | "settings" | "map" | "retention" | "briefing" | "missing"; id: string | null }
 
 export function parseRoute(hash: string): Route {
   const parts = hash.replace(/^#\/?/, "").split("/").filter(Boolean).map(decodeURIComponent);
@@ -7,6 +7,7 @@ export function parseRoute(hash: string): Route {
   if (a === "scenarios" && b === "runs" && c) return { view: "run", id: c };
   if (a === "scenarios" && !b) return { view: "scenarios", id: null };
   if (a === "sector" && (b === "energy" || b === "sovereign") && !c) return { view: "sector", id: b };
+  if (a === "briefing" && (b === "energy" || b === "sovereign") && !c) return { view: "briefing", id: b };
   if (a === "documents") return b ? { view: "document", id: b } : { view: "documents", id: null };
   if (a === "cases") return b ? { view: "case", id: b } : { view: "cases", id: null };
   if (["sources", "graph", "audit", "admin", "handoffs", "memory", "policy", "settings", "map", "retention"].includes(a) && !b) return { view: a as Route["view"], id: null };
@@ -19,6 +20,8 @@ export const NAV: NavItem[] = [
   { href: "#/", label: "Command Centre", view: ["home"], need: null },
   { href: "#/sector/energy", label: "Energy and Oil", view: ["sector"], need: "series.read", id: "energy" },
   { href: "#/sector/sovereign", label: "Sovereign Capital and Treasury", view: ["sector"], need: "series.read", id: "sovereign" },
+  { href: "#/briefing/energy", label: "Briefing: Energy and Oil", view: ["briefing"], need: "series.read", id: "energy" },
+  { href: "#/briefing/sovereign", label: "Briefing: Sovereign Capital", view: ["briefing"], need: "series.read", id: "sovereign" },
   { href: "#/sources", label: "Data & Sources", view: ["sources"], need: "sources.read" },
   { href: "#/evidence", label: "Evidence", view: ["evidence"], need: "evidence.read" },
   { href: "#/documents", label: "Documents", view: ["documents", "document"], need: "document.read" },
