@@ -1,9 +1,12 @@
 import type pg from "pg";
+import { connectorFor } from "../../connectors/src/index.js";
+import { getPrincipal } from "../../identity/src/index.js";
+import { permissionsOf } from "../../identity/src/permissions.js";
 import { PostgresGraph } from "../../graph/src/index.js";
 import { evidenceBriefs } from "../../ingest/src/observations.js";
 import { audit } from "../../ingest/src/store.js";
 import { DEFAULT_THRESHOLDS, type SignalThresholds } from "../../sectors/src/rules.js";
-import { DEFAULT_SIGNAL_RULES, SCHEMAS, SCOPES, SCOPE_INFO, type HormuzExposure, type Scope, type ScenarioDefaults } from "./schemas.js";
+import { DEFAULT_SIGNAL_RULES, SCHEMAS, SCOPES, SCOPE_INFO, type HormuzExposure, type IngestionSchedule, DEFAULT_SCHEDULE, type Scope, type ScenarioDefaults } from "./schemas.js";
 
 export class SettingsError extends Error { constructor(message: string, readonly code: "not_found" | "conflict" | "invalid" | "forbidden") { super(message); } }
 export interface Actor { id: string }
@@ -43,6 +46,21 @@ export async function createDraft(c: pg.PoolClient, inst: string, actor: Actor, 
     if (unknown.length) throw new SettingsError(`not in the graph: ${unknown.join(", ")}. Seed the graph with these countries first.`, "invalid");
     await checkEvidence(c, Object.values(d).map(p => p.evidenceId));
   }
+  if (scope === "ingestion_schedule") {
+    const d = parsed.data as IngestionSchedule, keys = Object.keys(d.sources);
+    const rows = (await c.query("SELECT source_key, platform_type, status FROM sources WHERE source_key = ANY($1)", [keys])).rows as { source_key: string; platform_type: string; status: string }[];
+    for (const k of keys) {
+      const r = rows.find(x => x.source_key === k);
+      if (!r) throw new SettingsError(`unknown source ${k}`, "invalid");
+      if (r.status !== "approved") throw new SettingsError(`source ${k} is ${r.status}; only approved sources can be scheduled`, "invalid");
+      if (!connectorFor(r.platform_type, d.sources[k]!.mode, k)) throw new SettingsError(`source ${k} has no ${d.sources[k]!.mode} connector`, "invalid");
+    }
+    if (d.steward) {
+      const p = await getPrincipal(c, d.steward);
+      if (!p || p.disabled) throw new SettingsError("the steward is not an active person in this institution", "invalid");
+      if (!permissionsOf(p.roles).has("case.write")) throw new SettingsError("the steward must hold a role that can own cases", "invalid");
+    }
+  }
   const v = (await c.query("SELECT COALESCE(max(version), 0) + 1 AS v FROM settings_versions WHERE scope = $1", [scope])).rows[0].v as number;
   const r = await c.query("INSERT INTO settings_versions (institution_id, scope, version, payload, note, created_by) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *", [inst, scope, v, JSON.stringify(parsed.data), note.trim(), actor.id]);
   await audit(c, inst, { actorType: "principal", actorId: actor.id, action: "settings.drafted", objectType: "settings", objectId: r.rows[0].id, payload: { scope, version: v, note: note.trim() } });
@@ -79,3 +97,7 @@ export async function effectiveScenarioDefaults(c: pg.PoolClient): Promise<{ def
   return { defaults: (a?.payload as ScenarioDefaults | undefined) ?? {}, version: a?.version ?? null };
 }
 export { DEFAULT_SIGNAL_RULES, SCOPES, SCOPE_INFO };
+export async function effectiveSchedule(c: pg.PoolClient): Promise<{ schedule: IngestionSchedule; version: number | null }> {
+  const a = await activeOf(c, "ingestion_schedule");
+  return a ? { schedule: a.payload as IngestionSchedule, version: a.version } : { schedule: DEFAULT_SCHEDULE, version: null };
+}

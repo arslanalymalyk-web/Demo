@@ -4,7 +4,7 @@ import { Async, Card, LinkClass, PageHead, Table, useAction, useApi } from "../c
 import { dateTime, num } from "../format";
 
 type Scope = SettingVersion["scope"];
-const TABS: { scope: Scope; label: string }[] = [{ scope: "signal_rules", label: "Signal thresholds" }, { scope: "scenario_defaults", label: "Scenario defaults" }, { scope: "hormuz_exposure", label: "Hormuz exposure" }];
+const TABS: { scope: Scope; label: string }[] = [{ scope: "signal_rules", label: "Signal thresholds" }, { scope: "scenario_defaults", label: "Scenario defaults" }, { scope: "hormuz_exposure", label: "Hormuz exposure" }, { scope: "ingestion_schedule", label: "Ingestion schedule" }];
 
 export function Settings({ me, can }: { me: Me; can: (p: string) => boolean }): ReactNode {
   const view = useApi<SettingsView>("/v1/settings");
@@ -23,7 +23,7 @@ export function Settings({ me, can }: { me: Me; can: (p: string) => boolean }): 
             </Card>
             {can("settings.manage") ? (
               <Card title="Draft a change" aside={<span className="small muted">A draft changes nothing until a different administrator activates it</span>}>
-                {scope === "signal_rules" ? <SignalForm s={s} reload={view.reload} /> : scope === "scenario_defaults" ? <ScenarioForm v={v} reload={view.reload} /> : <ExposureForm v={v} reload={view.reload} />}
+                {scope === "signal_rules" ? <SignalForm s={s} reload={view.reload} /> : scope === "scenario_defaults" ? <ScenarioForm v={v} reload={view.reload} /> : scope === "hormuz_exposure" ? <ExposureForm v={v} reload={view.reload} /> : <ScheduleForm v={v} s={s} reload={view.reload} />}
               </Card>
             ) : <div className="note">Your role can read settings but not change them.</div>}
             <Versions versions={s.versions} me={me} manage={can("settings.manage")} reload={view.reload} />
@@ -138,6 +138,33 @@ function ExposureForm({ v, reload }: { v: SettingsView; reload: () => void }): R
             <td><input type="text" disabled={!e.on || e.basis !== "sourced"} value={e.evidenceId} onChange={x => set(c, { evidenceId: x.target.value })} placeholder="evidence record id" /></td>
             <td><input type="text" disabled={!e.on} value={e.rationale} onChange={x => set(c, { rationale: x.target.value })} placeholder="at least 10 characters" /></td></tr>); })}</tbody></Table>
       <p className="small muted">Activation rewrites these links in the graph with the basis stated here, retires the old links, and takes effect for every new scenario run. A sourced value must cite an evidence record.</p>
+      <Note value={note} set={setNote} />
+      {a.error ? <div className="note err" role="alert">{a.error}</div> : null}
+      <button className="primary" disabled={a.busy}>Save as draft</button>
+    </form>
+  );
+}
+
+interface Sch { on: boolean; hours: string; mode: "series" | "catalog" }
+function ScheduleForm({ v, s, reload }: { v: SettingsView; s: SettingsView["scopes"][number]; reload: () => void }): ReactNode {
+  const cur = (s.active?.payload ?? { steward: null, pauseAfterFailures: 6, sources: {} }) as { steward: string | null; pauseAfterFailures: number; sources: Record<string, { intervalHours: number; mode: "series" | "catalog" }> };
+  const [rows, setRows] = useState<Record<string, Sch>>({}), [steward, setSteward] = useState<string>(cur.steward ?? ""), [after, setAfter] = useState(String(cur.pauseAfterFailures)), [note, setNote] = useState("");
+  const a = useAction(reload);
+  const get = (k: string, modes: string[]): Sch => rows[k] ?? { on: !!cur.sources[k], hours: String(cur.sources[k]?.intervalHours ?? 24), mode: cur.sources[k]?.mode ?? (modes[0] as Sch["mode"]) };
+  const set = (k: string, modes: string[], p: Partial<Sch>) => setRows({ ...rows, [k]: { ...get(k, modes), ...p } });
+  const submit = () => { const sources: Record<string, { intervalHours: number; mode: string }> = {}; for (const x of v.schedule.sources) { const r = get(x.key, x.modes); if (r.on) sources[x.key] = { intervalHours: Number(r.hours), mode: r.mode }; } return a.run(() => api("/v1/settings/ingestion_schedule", { method: "POST", body: { payload: { steward: steward || null, pauseAfterFailures: Number(after), sources }, note } })); };
+  return (
+    <form className="stack" onSubmit={e => { e.preventDefault(); void submit(); }}>
+      <Table label="Ingestion schedule"><thead><tr><th>Fetch</th><th>Source</th><th>Platform</th><th className="num">Every (hours)</th><th>Mode</th></tr></thead>
+        <tbody>{v.schedule.sources.map(x => { const r = get(x.key, x.modes); return (
+          <tr key={x.key}><td><input type="checkbox" aria-label={`Fetch ${x.name}`} checked={r.on} onChange={e => set(x.key, x.modes, { on: e.target.checked })} /></td><td>{x.name}<div className="small muted mono">{x.key}</div></td><td>{x.platform}</td>
+            <td className="num"><input type="number" min={1} max={8760} disabled={!r.on} aria-label={`${x.name} interval`} value={r.hours} onChange={e => set(x.key, x.modes, { hours: e.target.value })} /></td>
+            <td><select disabled={!r.on} value={r.mode} onChange={e => set(x.key, x.modes, { mode: e.target.value as Sch["mode"] })}>{x.modes.map(m => <option key={m} value={m}>{m}</option>)}</select></td></tr>); })}</tbody></Table>
+      <div className="grid g2">
+        <label>Steward, who owns the cases opened for a stale or failing source<select value={steward} onChange={e => setSteward(e.target.value)}><option value="">No automatic cases</option>{v.schedule.stewards.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+        <label>Pause a source after this many failed fetches in a row<input type="number" min={3} max={20} value={after} onChange={e => setAfter(e.target.value)} /></label>
+      </div>
+      <p className="small muted">Only approved sources appear. After a failure the next try comes after 15 minutes, then 30, 60 and so on, never later than the normal interval. A paused source stays paused until a person resumes it on the Source health page. The fetch is rate limited and follows each source's terms.</p>
       <Note value={note} set={setNote} />
       {a.error ? <div className="note err" role="alert">{a.error}</div> : null}
       <button className="primary" disabled={a.busy}>Save as draft</button>

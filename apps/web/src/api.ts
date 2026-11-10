@@ -90,11 +90,12 @@ export interface SectorView {
   composition?: { quarter: string; rows: { label: string; millionSar: number; share: number; evidenceId: string }[] };
 }
 
-export interface SettingVersion { id: string; scope: "signal_rules" | "scenario_defaults" | "hormuz_exposure"; version: number; status: "draft" | "active" | "retired"; payload: any; note: string; createdBy: string; activatedBy: string | null; createdAt: string; activatedAt: string | null }
+export interface SettingVersion { id: string; scope: "signal_rules" | "scenario_defaults" | "hormuz_exposure" | "ingestion_schedule"; version: number; status: "draft" | "active" | "retired"; payload: any; note: string; createdBy: string; activatedBy: string | null; createdAt: string; activatedAt: string | null }
 export interface SettingsView {
   scopes: { scope: SettingVersion["scope"]; title: string; description: string; active: SettingVersion | null; versions: SettingVersion[]; defaults: any }[];
   catalog: { key: string; title: string; pack: string; parameters: Record<string, Param> }[];
   exposure: { code: string; name: string; hormuzShare: number; spareBypassKbd: number; linkClass: string }[];
+  schedule: { sources: { key: string; name: string; platform: string; modes: ("series" | "catalog")[] }[]; stewards: { id: string; name: string }[] };
 }
 
 export interface MapEntity { key: string; kind: "facility" | "route" | "chokepoint"; name: string; attrs: Record<string, any> }
@@ -124,3 +125,13 @@ export interface ReasoningResult {
   facts: { ref: string; text: string; evidenceId: string | null; dataClass: string }[]; withheld: number; provider: string; model: string; promptHash: string; factsHash: string; at: string;
 }
 export interface ReasoningCall { id: string; task: string; subject: string | null; provider: string; model: string; verdict: string; reasons: string[]; fact_count: number; data_classes: string[]; duration_ms: number; created_at: string; raw_output: string | null; prompt_hash: string }
+
+export type SourceHealthState = "healthy" | "stale" | "failing" | "paused" | "no_data" | "not_approved";
+export interface SourceHealthRow {
+  sourceKey: string; name: string; publisher: string; platform: string; approval: string; scheduled: boolean; mode: string | null; intervalHours: number | null; nextRunAt: string | null;
+  paused: boolean; pausedReason: string | null; consecutiveFailures: number; lastError: string | null; health: SourceHealthState; reasons: string[]; packs: string[];
+  series: { seriesKey: string; title: string; latestPeriod: string | null; maxAgeDays: number | null; ageDays: number | null; stale: boolean }[];
+  lastAttemptAt: string | null; lastSuccessAt: string | null; lastSuccessAgeHours: number | null; evidence: { total: number; quarantined: number };
+  lastRuns: { id: string; status: string; trigger: string; startedAt: string; finishedAt: string | null; error: string | null; stats: Record<string, number> }[]; openCase: { id: string; caseKey: string } | null;
+}
+export interface SourceHealthView { asOf: string; scheduler: { enabled: boolean; running: boolean; tickSeconds: number | null; lastTickAt: string | null; scheduleVersion: number | null; steward: string | null; pauseAfterFailures: number }; sources: SourceHealthRow[] }

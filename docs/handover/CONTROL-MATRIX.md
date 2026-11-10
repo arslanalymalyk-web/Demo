@@ -49,3 +49,6 @@ This is a self-assessment of the build against SOC 2 (Trust Services Criteria) f
 | C41 | Model output verification; citations required | PI1.2, PI1.3 | A.8.28 | Implemented (tested with fakes only) | `packages/reasoning/src/verify.ts`, `tests/reasoning.test.ts` |
 | C42 | Data-class gate for model prompts | C1.1, CC6.7 | A.5.14, A.8.11 | Implemented | `packages/reasoning/src/facts.ts` |
 | C43 | Immutable, audited log of every model call | CC7.2 | A.8.15 | Implemented | `reasoning_calls`, audit event `reasoning.call` |
+| C44 | Governed ingestion schedule, two-person activation | CC8.1, CC5.2 | A.8.32 | Implemented | `packages/settings`, `tests/scheduler.test.ts` |
+| C45 | Source health monitoring, back-off, auto-pause, steward cases | A1.1, CC7.1, CC7.2 | A.8.16 | Implemented (real run tried on one source only) | `packages/scheduler`, `tests/scheduler.test.ts` |
+| C46 | Audited run, pause and resume of scheduled sources | CC7.2 | A.8.15 | Implemented | audit events `scheduler.*` |

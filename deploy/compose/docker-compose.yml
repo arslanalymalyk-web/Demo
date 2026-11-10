@@ -83,6 +83,9 @@ services:
       TIGERIS_MODEL_NAME: ${TIGERIS_MODEL_NAME:-}
       TIGERIS_MODEL_BASE_URL: ${TIGERIS_MODEL_BASE_URL:-}
       # A hosted model also needs: the egress network below, the model host on the network allowlist, and TIGERIS_MODEL_API_KEY_FILE pointing at a mounted secret.
+      # Scheduled ingestion runs inside the API. It needs the egress network below and the source hosts on the network allowlist; off by default.
+      TIGERIS_SCHEDULER_ENABLED: ${TIGERIS_SCHEDULER_ENABLED:-false}
+      TIGERIS_SCHEDULER_TICK_SECONDS: ${TIGERIS_SCHEDULER_TICK_SECONDS:-60}
       LOG_LEVEL: ${LOG_LEVEL:-info}
     secrets: [db_app_url, metrics_token]
     networks: [backend, idp]

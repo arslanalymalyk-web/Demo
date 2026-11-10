@@ -6,6 +6,7 @@ export interface Config {
   production: boolean; databaseUrl: string; institutionId: string; port: number; host: string;
   oidc: { issuer: string; audience: string; jwksUri: string; requireMfa: boolean };
   reasoning: { provider: "off" | "anthropic" | "openai_compatible" | "local_extractive"; model: string; baseUrl: string; apiKey: string | null };
+  scheduler: { enabled: boolean; tickSeconds: number };
   clientDataEnabled: boolean; metricsToken: string | null; trustProxy: boolean; logLevel: string; rateLimit: { max: number; timeWindow: string } | null;
 }
 
@@ -35,11 +36,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     else if (!baseUrl) problems.push("TIGERIS_MODEL_BASE_URL is required for an OpenAI-compatible provider");
     if (baseUrl && production && !baseUrl.startsWith("https://")) problems.push("TIGERIS_MODEL_BASE_URL must use https in production");
   }
+  const tick = Number(env.TIGERIS_SCHEDULER_TICK_SECONDS ?? 60);
+  if (!Number.isFinite(tick) || tick < 10 || tick > 3600) problems.push("TIGERIS_SCHEDULER_TICK_SECONDS must be between 10 and 3600");
   const max = Number(env.RATE_LIMIT_PER_MINUTE ?? 600);
   if (!Number.isFinite(max) || max < 0) problems.push("RATE_LIMIT_PER_MINUTE must be a number, or 0 to turn it off");
   if (problems.length) throw new Error(`configuration refused:\n - ${problems.join("\n - ")}`);
   return {
     production, databaseUrl, institutionId, port: Number(env.PORT ?? 3000), host: env.HOST ?? "127.0.0.1", oidc: { issuer, audience, jwksUri, requireMfa },
+    scheduler: { enabled: env.TIGERIS_SCHEDULER_ENABLED === "true", tickSeconds: tick },
     reasoning: { provider: provider as Config["reasoning"]["provider"], model, baseUrl, apiKey },
     clientDataEnabled: env.TIGERIS_CLIENT_DATA_ENABLED === "true", metricsToken: env.METRICS_TOKEN || null, trustProxy: env.TIGERIS_TRUST_PROXY === "true", logLevel: env.LOG_LEVEL ?? "info",
     rateLimit: max === 0 ? null : { max, timeWindow: "1 minute" },

@@ -1,12 +1,13 @@
 import { z } from "zod";
 import { DEFAULT_THRESHOLDS } from "../../sectors/src/rules.js";
 
-export type Scope = "signal_rules" | "scenario_defaults" | "hormuz_exposure";
-export const SCOPES: Scope[] = ["signal_rules", "scenario_defaults", "hormuz_exposure"];
+export type Scope = "signal_rules" | "scenario_defaults" | "hormuz_exposure" | "ingestion_schedule";
+export const SCOPES: Scope[] = ["signal_rules", "scenario_defaults", "hormuz_exposure", "ingestion_schedule"];
 export const SCOPE_INFO: Record<Scope, { title: string; description: string }> = {
   signal_rules: { title: "Signal thresholds", description: "The levels at which the attention-queue rules raise a watch or an alert." },
   scenario_defaults: { title: "Scenario defaults", description: "Default values and ranges for scenario parameters. A value taken from a source must cite its evidence." },
   hormuz_exposure: { title: "Hormuz exposure", description: "How much of each producer's crude exports pass the Strait of Hormuz and how much spare bypass capacity exists. Activation writes these into the graph." },
+  ingestion_schedule: { title: "Ingestion schedule", description: "Which approved sources are fetched automatically, how often, and who owns the cases opened when a source goes stale or keeps failing. Nothing is fetched on a schedule until this is activated." },
 };
 
 const frac = z.number().gt(0).lt(1);
@@ -29,7 +30,15 @@ export const hormuzExposureSchema = z.record(z.string().regex(/^[A-Z]{2}$/), z.o
   hormuzShare: z.number().min(0).max(1), spareBypassKbd: z.number().min(0).max(20000), basis, evidenceId: z.string().uuid().optional(), rationale: z.string().min(10).max(1000),
 }).strict().refine(p => p.basis !== "sourced" || !!p.evidenceId, "a sourced value must cite an evidence record"));
 
-export const SCHEMAS = { signal_rules: signalRulesSchema, scenario_defaults: scenarioDefaultsSchema, hormuz_exposure: hormuzExposureSchema } as const;
+export const ingestionScheduleSchema = z.object({
+  steward: z.string().uuid().nullable(),
+  pauseAfterFailures: z.number().int().min(3).max(20),
+  sources: z.record(z.string().regex(/^[a-z0-9][a-z0-9-]{1,119}$/), z.object({ intervalHours: z.number().int().min(1).max(8760), mode: z.enum(["catalog", "series"]) }).strict()),
+}).strict();
+export type IngestionSchedule = z.infer<typeof ingestionScheduleSchema>;
+export const DEFAULT_SCHEDULE: IngestionSchedule = { steward: null, pauseAfterFailures: 6, sources: {} };
+
+export const SCHEMAS = { signal_rules: signalRulesSchema, scenario_defaults: scenarioDefaultsSchema, hormuz_exposure: hormuzExposureSchema, ingestion_schedule: ingestionScheduleSchema } as const;
 export const DEFAULT_SIGNAL_RULES = DEFAULT_THRESHOLDS;
 export type ScenarioDefaults = z.infer<typeof scenarioDefaultsSchema>;
 export type HormuzExposure = z.infer<typeof hormuzExposureSchema>;

@@ -30,7 +30,9 @@ A person must exist as a provisioned principal with a role before they can use t
 
 ## Ingestion
 
-Source ingestion runs from the ingest command for each source. Run it on the schedule the client chooses. A source whose data is stale is shown as lagging or with its snapshot date, never as current. Quarantined records appear in the ingestion view and need a person to review them.
+The Source health screen shows every source with its state, last success, next run, failures and recent runs. Operators with ingestion rights can run a scheduled source now, pause it or resume it, each with a recorded reason. A source that fails repeatedly is retried after 15, 30, 60 minutes and so on, then paused automatically after the configured number of failures; it stays paused until a person resumes it. A paused or stale scheduled source opens a case for the steward named in the schedule. A source whose publisher blocks automated access will keep failing: pause it and ask the publisher for an approved route.
+
+Without the scheduler, source ingestion runs from the ingest command for each source, on whatever schedule the client chooses. A source whose data is stale is shown as lagging or with its snapshot date, never as current.
 
 ## Metrics and alerts
 
@@ -42,6 +44,9 @@ Scrape `/metrics` with the bearer token. Suggested alerts:
 | `tigeris_auth_failures_total{reason}` | sudden rise (possible attack or identity provider problem) |
 | `tigeris_db_pool_connections{state}` | waiting connections stay above zero |
 | `tigeris_document_queue_busy` | stuck busy for long periods |
+| `tigeris_sources{health="failing"}` or `{health="stale"}` | above zero for longer than the client's tolerance |
+| `tigeris_source_last_success_age_hours{source}` | above the source's normal interval plus a margin |
+| `tigeris_ingest_jobs_24h{status="failed"}` | rising with no matching completed jobs |
 
 Logs are JSON with secrets redacted. Every response carries a request id; use it to find the matching log lines.
 

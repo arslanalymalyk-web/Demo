@@ -15,7 +15,7 @@ _Confidential. Property of Tiger Capital AI. Prepared for the named recipients o
 ## Source rights and data
 
 1. Licence confirmations for DataSaudi, GCC-Stat, JODI and IMF.
-2. An approved access route for IMF data.
+2. An approved access route for IMF data. The IMF commodity workbook currently answers automated requests with HTTP 403, so a scheduled fetch of it fails and pauses.
 3. The unit for GDP and the period of the M3 growth rate.
 4. Permission requests to the Qatar and Bahrain data teams.
 5. Widening Gulf coverage to the UAE, Qatar, Oman and Iran once rights are confirmed. Iraq data stops at March 2024 and is shown as lagging.
@@ -27,6 +27,12 @@ _Confidential. Property of Tiger Capital AI. Prepared for the named recipients o
 2. The client's own security review, recorded, before client data or institution documents are enabled.
 3. A host, TLS certificate, secret store and backup location.
 4. The names of the first administrators (two, for settings approval).
+
+## Scheduled ingestion
+
+1. Which approved sources to fetch automatically and how often.
+2. The steward who owns cases for stale or failing sources, and the number of failures before a source pauses.
+3. A decision on whether the API may have outbound access (scheduler on) or fetching stays in the separate ingest service.
 
 ## Model use
 

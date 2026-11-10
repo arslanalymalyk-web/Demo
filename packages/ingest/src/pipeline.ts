@@ -6,7 +6,7 @@ import { RULES_VERSION, validateRecord, type SourceView } from "./validate.js";
 
 export class SourceNotApprovedError extends Error {}
 export interface IngestStats { seen: number; inserted: number; duplicates: number; accepted: number; warned: number; quarantined: number; newVersions: number; facts: number }
-export interface IngestDeps { pool: pg.Pool; institutionId: string; sourceKey: string; connector: Connector; http: PoliteHttp; limit?: number; seriesKey?: string; localFile?: string; now?: () => Date; batchSize?: number }
+export interface IngestDeps { pool: pg.Pool; institutionId: string; sourceKey: string; connector: Connector; http: PoliteHttp; limit?: number; seriesKey?: string; localFile?: string; trigger?: "command" | "manual" | "scheduled"; now?: () => Date; batchSize?: number }
 
 interface SourceRow extends SourceView { id: string; publisher: string; data_class: string; licence_name: string | null; original_agency: string | null }
 
@@ -22,7 +22,7 @@ export async function runIngestion(d: IngestDeps): Promise<IngestStats & { jobId
       await audit(c, d.institutionId, { actorType: "system", action: "ingestion.refused", objectType: "source", objectId: row.id, payload: { source: d.sourceKey, status: row.status } });
       return { source: row as SourceRow, jobId: null as string | null };
     }
-    const job = await c.query("INSERT INTO ingestion_jobs (institution_id, source_id) VALUES ($1,$2) RETURNING id", [d.institutionId, row.id]);
+    const job = await c.query("INSERT INTO ingestion_jobs (institution_id, source_id, trigger) VALUES ($1,$2,$3) RETURNING id", [d.institutionId, row.id, d.trigger ?? "command"]);
     await audit(c, d.institutionId, { actorType: "system", action: "ingestion.started", objectType: "ingestion_job", objectId: job.rows[0].id, payload: { source: d.sourceKey, limit: d.limit ?? null } });
     return { source: { ...row, freshness_limit_ms: Number(row.freshness_limit_ms) } as SourceRow, jobId: job.rows[0].id as string };
   });

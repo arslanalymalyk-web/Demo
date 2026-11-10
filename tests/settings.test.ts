@@ -89,7 +89,7 @@ suite("governed settings against a real database", () => {
     const s = await scene();
     const g = await s.call("ed", "GET", "/v1/settings");
     expect(g.status).toBe(200);
-    expect(g.body.scopes.map((x: { scope: string }) => x.scope)).toEqual(["signal_rules", "scenario_defaults", "hormuz_exposure"]);
+    expect(g.body.scopes.map((x: { scope: string }) => x.scope)).toEqual(["signal_rules", "scenario_defaults", "hormuz_exposure", "ingestion_schedule"]);
     expect(g.body.catalog.map((t: { key: string }) => t.key)).toContain("reserve-runway");
     expect(g.body.exposure).toEqual(expect.arrayContaining([expect.objectContaining({ code: "SA", linkClass: "assumed", hormuzShare: 0.5 })]));
     expect(g.body.scopes[0].defaults.E1.watch).toBe(0.2);

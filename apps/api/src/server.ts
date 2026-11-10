@@ -13,9 +13,11 @@ import { CaseError, addEvidence, addParticipant, addRecommendation, openCaseFrom
 import { GovernanceError, activatePolicy, createPolicyDraft, listPolicies } from "../../../packages/governance/src/index.js";
 import { IntakeError, tools as docTools, downloadDocument, getDocument, getPage, listDocuments, retryDocument, searchDocuments, submitDocument, type DocumentQueue } from "../../../packages/documents/src/index.js";
 import { RetentionError, exportCase, holdFor, placeHold, releaseHold, retentionReport } from "../../../packages/retention/src/index.js";
-import { SCOPES, SCOPE_INFO, DEFAULT_SIGNAL_RULES, SettingsError, activate as activateSetting, activeOf, createDraft as createSettingDraft, effectiveScenarioDefaults, effectiveThresholds, listVersions as listSettings, type Scope } from "../../../packages/settings/src/index.js";
+import { SCOPES, SCOPE_INFO, DEFAULT_SIGNAL_RULES, SettingsError, activate as activateSetting, activeOf, createDraft as createSettingDraft, effectiveScenarioDefaults, effectiveSchedule, effectiveThresholds, listVersions as listSettings, type Scope } from "../../../packages/settings/src/index.js";
 import { SECTORS, buildMap, buildSector, composeBriefing, isPack, type BriefingCase, type BriefingRun } from "../../../packages/sectors/src/index.js";
+import { connectorFor } from "../../../packages/connectors/src/index.js";
 import { ReasoningError, listCalls, runReasoning, type ModelAdapter } from "../../../packages/reasoning/src/index.js";
+import { SchedulerError, pauseSource, requestRun, resumeSource, sourceHealth, type Scheduler } from "../../../packages/scheduler/src/index.js";
 import { getLineage, verifyAuditChain } from "../../../packages/ingest/src/lineage.js";
 import { withTenant } from "../../../packages/ingest/src/store.js";
 
@@ -76,6 +78,10 @@ const ACCESS: Record<string, Permission | null | "public"> = {
   "GET /v1/sectors": "series.read",
   "GET /v1/sectors/:pack": "series.read",
   "GET /v1/briefings/:pack": "series.read",
+  "GET /v1/sources/health": "sources.read",
+  "POST /v1/sources/:key/run": "ingest.manage",
+  "POST /v1/sources/:key/pause": "ingest.manage",
+  "POST /v1/sources/:key/resume": "ingest.manage",
   "GET /v1/reasoning/config": "sources.read",
   "POST /v1/reasoning/run": "reasoning.use",
   "GET /v1/reasoning/calls": "reasoning.read",
@@ -110,7 +116,7 @@ declare module "fastify" { interface FastifyRequest { principal?: Principal } }
  * The institution is fixed by deployment configuration (one deployment per institution).
  * Every route except /health needs a bearer token from the institution's identity provider and a provisioned, active principal with the right role.
  */
-export interface ServerOptions { pool: pg.Pool; institutionId: string; verifier: TokenVerifier; documents?: DocumentQueue; clientDataEnabled?: boolean; logger?: FastifyServerOptions["logger"]; rateLimit?: { max: number; timeWindow: string } | null; metricsToken?: string | null; trustProxy?: boolean; reasoning?: { adapter: ModelAdapter; perHour?: number } | null }
+export interface ServerOptions { pool: pg.Pool; institutionId: string; verifier: TokenVerifier; documents?: DocumentQueue; clientDataEnabled?: boolean; logger?: FastifyServerOptions["logger"]; rateLimit?: { max: number; timeWindow: string } | null; metricsToken?: string | null; trustProxy?: boolean; reasoning?: { adapter: ModelAdapter; perHour?: number } | null; scheduler?: Scheduler | null }
 
 export function buildServer(opts: ServerOptions): FastifyInstance {
   const app = Fastify({
@@ -125,6 +131,13 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   const authFailures = new Counter({ name: "tigeris_auth_failures_total", help: "Refused requests by reason", labelNames: ["reason"], registers: [registry] });
   new Gauge({ name: "tigeris_db_pool_connections", help: "Database pool connections", labelNames: ["state"], registers: [registry], collect() { this.set({ state: "total" }, opts.pool.totalCount); this.set({ state: "idle" }, opts.pool.idleCount); this.set({ state: "waiting" }, opts.pool.waitingCount); } });
   new Gauge({ name: "tigeris_document_queue_busy", help: "1 while documents are being processed", registers: [registry], collect() { this.set(opts.documents?.busy ? 1 : 0); } });
+  // Source health for the monitoring system: read from stored facts, cached briefly so a scrape stays cheap.
+  let healthCache: { at: number; rows: Awaited<ReturnType<typeof sourceHealth>> } | null = null;
+  const healthNow = async () => { if (!healthCache || Date.now() - healthCache.at > 30_000) healthCache = { at: Date.now(), rows: await withTenant(opts.pool, opts.institutionId, c => sourceHealth(c)) }; return healthCache.rows; };
+  new Gauge({ name: "tigeris_sources", help: "Sources by health", labelNames: ["health"], registers: [registry], async collect() { this.reset(); const rows = await healthNow().catch(() => []); for (const h of ["healthy", "stale", "failing", "paused", "no_data", "not_approved"]) this.set({ health: h }, rows.filter(r => r.health === h).length); } });
+  new Gauge({ name: "tigeris_source_last_success_age_hours", help: "Hours since the last completed fetch of a scheduled source", labelNames: ["source"], registers: [registry], async collect() { this.reset(); for (const r of (await healthNow().catch(() => [])).filter(x => x.scheduled && x.lastSuccessAgeHours !== null)) this.set({ source: r.sourceKey }, r.lastSuccessAgeHours!); } });
+  new Gauge({ name: "tigeris_ingest_jobs_24h", help: "Ingestion jobs started in the last 24 hours, by outcome", labelNames: ["status"], registers: [registry], async collect() { this.reset(); const rows = await withTenant(opts.pool, opts.institutionId, async c => (await c.query("SELECT status, count(*)::int AS n FROM ingestion_jobs WHERE started_at > now() - interval '24 hours' GROUP BY status")).rows).catch(() => []); for (const s of ["completed", "failed", "running"]) this.set({ status: s }, rows.find((r: { status: string; n: number }) => r.status === s)?.n ?? 0); } });
+  new Gauge({ name: "tigeris_scheduler_enabled", help: "1 when scheduled ingestion is running in this process", registers: [registry], collect() { this.set(opts.scheduler ? 1 : 0); } });
   app.addHook("onRequest", async (req, reply) => { reply.header("x-request-id", req.id); });
   app.addHook("onSend", async (req, reply, payload) => {
     reply.header("x-content-type-options", "nosniff").header("x-frame-options", "DENY").header("referrer-policy", "no-referrer").header("cross-origin-resource-policy", "same-origin");
@@ -391,6 +404,10 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
     return {
       scopes: await (async () => { const out = []; for (const scope of SCOPES) out.push({ scope, ...SCOPE_INFO[scope], active: await activeOf(c, scope), versions: versions.filter(v => v.scope === scope), defaults: scope === "signal_rules" ? DEFAULT_SIGNAL_RULES : {} }); return out; })(),
       catalog: Object.values(TEMPLATES).map(t => ({ key: t.key, title: t.title, pack: t.pack, parameters: t.defaults(null) })),
+      schedule: {
+        sources: (await c.query("SELECT source_key, name, platform_type FROM sources WHERE status = 'approved' ORDER BY source_key")).rows.map((r: { source_key: string; name: string; platform_type: string }) => ({ key: r.source_key, name: r.name, platform: r.platform_type, modes: (["series", "catalog"] as const).filter(m => connectorFor(r.platform_type, m, r.source_key)) })).filter((r: { modes: string[] }) => r.modes.length > 0),
+        stewards: (await listPrincipals(c)).filter(p => !p.disabled && permissionsOf(p.roles).has("case.write")).map(p => ({ id: p.id, name: p.displayName ?? p.subject })),
+      },
       exposure: links.map(l => ({ code: String(l.attrs.code), name: l.name, hormuzShare: Number(l.params.hormuzShare), spareBypassKbd: Number(l.params.spareBypassKbd), linkClass: l.linkClass })),
     };
   }));
@@ -420,6 +437,24 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
       templates: Object.values(TEMPLATES).map(t => ({ key: t.key, pack: t.pack, title: t.title })), viewerId: req.principal!.id,
     }));
   });
+
+  // Source health and scheduled ingestion. The schedule is a governed setting; these routes read state and let an operator run, pause or resume one source.
+  app.get("/v1/sources/health", async () => tenant(async c => {
+    const { schedule, version } = await effectiveSchedule(c);
+    return { asOf: new Date().toISOString(), scheduler: { enabled: !!opts.scheduler, running: opts.scheduler?.running ?? false, tickSeconds: opts.scheduler?.tickSeconds ?? null, lastTickAt: opts.scheduler?.lastTickAt?.toISOString() ?? null, scheduleVersion: version, steward: schedule.steward, pauseAfterFailures: schedule.pauseAfterFailures }, sources: await sourceHealth(c) };
+  }));
+  const keyOf = (req: { params: unknown }) => z.string().regex(/^[a-z0-9][a-z0-9-]{1,119}$/).safeParse((req.params as { key: string }).key);
+  const reasonBody = z.object({ reason: z.string().min(1).max(1000) });
+  const sched = async (req: { principal?: Principal; params: unknown; body: unknown }, reply: { code: (n: number) => { send: (b: unknown) => unknown } }, fn: (c: pg.PoolClient, key: string, reason: string) => Promise<void>, needReason: boolean) => {
+    const k = keyOf(req), b = reasonBody.safeParse(req.body ?? {});
+    if (!k.success) return reply.code(400).send({ error: "invalid_key" });
+    if (needReason && !b.success) return bad(reply, b.error);
+    try { await tenant(c => fn(c, k.data, b.success ? b.data.reason : "")); return reply.code(202).send({ ok: true }); }
+    catch (e) { if (e instanceof SchedulerError) return reply.code({ not_found: 404, conflict: 409, invalid: 422 }[e.code]).send({ error: e.code, message: e.message }); throw e; }
+  };
+  app.post("/v1/sources/:key/run", async (req, reply) => { if (!opts.scheduler) return reply.code(409).send({ error: "conflict", message: "Scheduled ingestion is not running in this deployment. Run the ingest command instead." }); const r = await sched(req, reply, (c, k) => requestRun(c, opts.institutionId, req.principal!.id, k, new Date()), false); void opts.scheduler.tick().catch(() => undefined); return r; });
+  app.post("/v1/sources/:key/pause", async (req, reply) => sched(req, reply, (c, k, why) => pauseSource(c, opts.institutionId, req.principal!.id, k, why, new Date()), true));
+  app.post("/v1/sources/:key/resume", async (req, reply) => sched(req, reply, (c, k, why) => resumeSource(c, opts.institutionId, req.principal!.id, k, why, new Date()), true));
 
   // Reasoning: a model drafts, fixed code verifies, a person decides. Off unless a model is configured. Every call is recorded and audited.
   const reasoningLimiter = new RateLimiter(opts.reasoning?.perHour ?? 30, 3_600_000);

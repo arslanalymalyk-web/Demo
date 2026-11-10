@@ -6,7 +6,7 @@ _Confidential. Property of Tiger Capital AI. Prepared for the client's IT and se
 
 | # | From | To | Data | Protection |
 |---|---|---|---|---|
-| 1 | Public source hosts (DataSaudi, IMF, JODI, EIA and others on the allowlist) | Ingest connectors in the API | Public records | Egress allowlist, verified TLS, low request rate, robots.txt honoured; stored as immutable evidence with provenance |
+| 1 | Public source hosts (DataSaudi, IMF, JODI, EIA and others on the allowlist) | Ingest connectors in the API | Public records | Egress allowlist, verified TLS, low request rate, robots.txt honoured; started by an operator command or, when enabled, by the in-process scheduler under a governed schedule; stored as immutable evidence with provenance |
 | 2 | Person's browser | Proxy, then API | Requests with a bearer token | TLS 1.2 or 1.3, security headers, rate limits, access rules |
 | 3 | Person's browser | Identity provider | Authorization-code flow with PKCE | Client's provider; token kept in browser memory |
 | 4 | API | Identity provider (JWKS) | Public signing keys | https required in production |

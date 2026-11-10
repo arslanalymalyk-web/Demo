@@ -20,6 +20,7 @@ A TypeScript modular monolith (Node 22, pnpm workspace). One Fastify API (`apps/
 | `sectors` | Versioned signal rules over stored series; signal to case |
 | `settings` | Governed settings: draft, active, retired; two-person activation |
 | `retention` | Ten-year report, legal holds, case exports with integrity hash |
+| `scheduler` | Scheduled ingestion with back-off and auto-pause, source health, cases for stale or failing sources (ADR 0022) |
 | `reasoning` | Model-agnostic drafting. A model proposes cited text from stored facts, fixed code verifies every figure and citation, every call is logged (ADR 0021) |
 
 ## Data model
@@ -60,6 +61,10 @@ Ivory design, navy theme, right-to-left aware. Runtime configuration comes from 
 ## Decisions
 
 `docs/adr` holds twenty architecture decision records. `docs/decisions` holds the 200-answer decision log and the resolutions. Decision 11 (independent penetration test and client review before client data) governs go-live.
+
+## Scheduled ingestion
+
+`packages/scheduler`: the active `ingestion_schedule` setting is synced into `source_schedule` (running state only). Each pass claims one due source atomically, runs the normal ingestion pipeline with the source's connector, and records the outcome (success resets failures; failure backs off; the configured limit pauses the source). `sourceHealth` reads stored facts to classify every source. For scheduled sources that are stale or failing, one case is opened through signal-to-case and owned by the named steward. Every transition writes an audit event.
 
 ## Reasoning
 

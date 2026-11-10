@@ -57,6 +57,10 @@ Production start-up refuses weak or missing configuration and lists every proble
 6. Start the backup service and run the restore drill in [BACKUP-RESTORE.md](BACKUP-RESTORE.md) before go-live.
 7. Review the image inventory produced by CI and the SBOM in `docs/handover/sbom`.
 
+## Optional: scheduled ingestion
+
+Off by default. Set `TIGERIS_SCHEDULER_ENABLED=true`, add the egress network to the API service in the compose file, and allow exactly the source hosts on the network allowlist (the sources are listed on the Data and Sources screen; each connector reaches only its own source). Then two administrators activate a schedule under Settings, Ingestion schedule. With the scheduler on and no schedule active, nothing is fetched. The scheduler appears on `/metrics` as `tigeris_scheduler_enabled`. If the client prefers the API never to have outbound access, leave it off and use the separate ingest service or an external scheduler running the ingest command.
+
 ## Optional: connecting a model
 
 The Assistant is off by default and nothing is sent anywhere. To enable it, set `TIGERIS_REASONING_PROVIDER` to `anthropic`, `openai_compatible` (any endpoint, including an on-premises model) or `local_extractive` (no network, quotes stored facts only). Set `TIGERIS_MODEL_NAME`, `TIGERIS_MODEL_BASE_URL` (https in production) and the key as a mounted secret (`TIGERIS_MODEL_API_KEY_FILE`). The API container sits on an internal network with no route out, so also add the egress network to it and allow exactly the model host on the network allowlist. Only public-record, sample and scenario facts are placed in prompts. Review the provider's data terms first. Not yet tried against a real endpoint.

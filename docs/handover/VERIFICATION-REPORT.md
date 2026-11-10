@@ -8,7 +8,7 @@ This report says what was checked in this build, how, and what was **not** check
 
 | Area | What was checked | How | Result |
 |---|---|---|---|
-| Automated tests | 228 tests in 16 files, covering every module | `pnpm check` (wording lint, type check, tests) against real PostgreSQL 16 | All pass |
+| Automated tests | 246 tests in 17 files, covering every module | `pnpm check` (wording lint, type check, tests) against real PostgreSQL 16 | All pass |
 | Tenancy | A runtime role that owns nothing and cannot bypass row-level security; every institution table forces row-level security; no data crosses institutions | Tests in every module create two institutions and look for leaks. A start-up check refuses to run as a superuser, an owner, or with a table that does not force row-level security | Pass. The API refused to start as the owner role in a live run |
 | Evidence and audit | Evidence, decisions, policy decisions, case history, memory, settings and exports cannot be changed or deleted, even by the application role | Database triggers, attacked directly in tests. The audit trail is a per-institution hash chain written in the same transaction | Pass |
 | No deletion | The application role has no DELETE right on any table except the person-to-role link, and no TRUNCATE right | A test reads the grants | Pass |
@@ -20,6 +20,7 @@ This report says what was checked in this build, how, and what was **not** check
 | Dependencies | No known vulnerabilities; permissive licences only | `pnpm audit` (zero known, production and build tools) and a licence check over 258 packages | Pass. One high-severity issue in a production dependency was fixed by upgrading |
 | Real data | Figures shown come from stored public records with provenance | Ingested DataSaudi, IMF, JODI and an EIA article; every figure opens to its evidence record | Pass |
 | Reasoning | Output verification (numbers, citations, advice, links), data-class gate, immutable call log, per-person limit, adapter request shape, failure handling that never echoes keys or bodies | 29 tests with scripted and extractive models and a fake HTTP layer; a run over the real stored data with the local extractive model (summary, answer, questions, recommendation draft all verified) | Pass for the checks. See item 13 below |
+| Scheduled ingestion | Rules for back-off and pause, due-time and claim atomicity, overlapping passes, run time limit, schedule validation, case opening and no duplicates, health from stored series, run and quarantine facts, permissions, audit events, metrics | Tests against a real database with scripted runs and a fake source; one real run through the live pipeline against the IMF source in the development database | Pass for the checks. See item 14 |
 | Document intake | PDF text layer, OCR for scans and images, Word text, plain text; unsafe files refused | Tests with real PDFs, a scanned image and a scanned PDF through Poppler and Tesseract 5.3.4 | Pass for English |
 
 ## What was NOT verified
@@ -39,6 +40,7 @@ These are real gaps. None is hidden by a passing test.
 11. **Facility positions on the map are approximate** and sea routes are schematic, and are labelled so. They have not been checked against a gazetteer.
 12. **The client's own data has never been connected.** Everything verified used public records, the system's own test data, or content labelled as a Sample dataset.
 13. **No real model endpoint was called.** The Claude API and OpenAI-compatible adapters were tested only against a fake HTTP layer, because no key or endpoint was available. Their request shapes follow the providers' published formats and must be tried against the real service. Verification proves each number is quoted from a cited stored fact; it does not prove the prose reasons soundly, so people read every draft. The number-word and advice checks use fixed lists and will not catch every paraphrase.
+14. **Scheduled ingestion was exercised against one real source only, and that source refused.** The IMF commodity workbook returned HTTP 403 to automated access, so the run failed, backed off (15 then 30 minutes) and was recorded as designed; no successful scheduled fetch from a real source has been seen. The scheduler has not run inside the container images, and a fetch that hangs is given up after its time limit but its request is not cancelled. Run-now is recorded as a scheduled run.
 
 ## Defects found and fixed by verification (for the record)
 

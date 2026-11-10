@@ -2,6 +2,7 @@ import pg from "pg";
 import { DocumentQueue } from "../../../packages/documents/src/index.js";
 import { oidcVerifier, remoteKeys } from "../../../packages/identity/src/index.js";
 import { anthropicAdapter, extractiveAdapter, openAiCompatibleAdapter, type ModelAdapter } from "../../../packages/reasoning/src/index.js";
+import { Scheduler, ingestJob } from "../../../packages/scheduler/src/index.js";
 import { loadConfig } from "./config.js";
 import { buildServer } from "./server.js";
 import { checkRuntimeSafety } from "./startup.js";
@@ -22,19 +23,21 @@ try {
 } catch (e) { console.error(`configuration refused: ${(e as Error).message}`); await pool.end(); process.exit(2); }
 
 const documents = new DocumentQueue(pool, cfg.institutionId);
+const scheduler = cfg.scheduler.enabled ? new Scheduler({ pool, institutionId: cfg.institutionId, run: ingestJob(pool, cfg.institutionId), tickMs: cfg.scheduler.tickSeconds * 1000, log: (m, o) => console.log(JSON.stringify({ level: "info", msg: m, ...o })) }) : null;
 const app = buildServer({
   pool, institutionId: cfg.institutionId, verifier: oidcVerifier(cfg.oidc, remoteKeys(cfg.oidc.jwksUri)), documents, clientDataEnabled: cfg.clientDataEnabled,
   logger: { level: cfg.logLevel, redact: { paths: ["req.headers.authorization", "req.headers.cookie", "res.headers['set-cookie']"], remove: true } },
-  reasoning: adapter ? { adapter } : null, rateLimit: cfg.rateLimit, metricsToken: cfg.metricsToken, trustProxy: cfg.trustProxy,
+  reasoning: adapter ? { adapter } : null, scheduler, rateLimit: cfg.rateLimit, metricsToken: cfg.metricsToken, trustProxy: cfg.trustProxy,
 });
 await app.listen({ port: cfg.port, host: cfg.host });
 const resumed = await documents.resume();
-app.log.info({ port: cfg.port, host: cfg.host, production: cfg.production, resumedDocuments: resumed, metrics: cfg.metricsToken !== null, reasoning: adapter ? `${adapter.provider}/${adapter.model}` : "off" }, "api started");
+scheduler?.start();
+app.log.info({ port: cfg.port, host: cfg.host, production: cfg.production, resumedDocuments: resumed, metrics: cfg.metricsToken !== null, scheduler: scheduler ? `every ${cfg.scheduler.tickSeconds}s` : "off", reasoning: adapter ? `${adapter.provider}/${adapter.model}` : "off" }, "api started");
 
 // Finish in-flight work before exiting, so a restart does not cut a request or a document in half.
 let closing = false;
 for (const sig of ["SIGTERM", "SIGINT"] as const) process.on(sig, async () => {
   if (closing) return; closing = true; app.log.info({ sig }, "shutting down");
   const timer = setTimeout(() => process.exit(1), 25_000); timer.unref();
-  try { await app.close(); await documents.idle(); await pool.end(); } finally { process.exit(0); }
+  try { await app.close(); await documents.idle(); await scheduler?.stop(); await pool.end(); } finally { process.exit(0); }
 });
