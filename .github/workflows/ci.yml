@@ -39,7 +39,7 @@ jobs:
           pnpm e2e
       - name: Keep the browser report when the suite fails
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with: { name: playwright-report, path: "playwright-report/\ntest-results/" }
 
   images:
@@ -61,5 +61,5 @@ jobs:
       - name: Image inventory (software bill of materials for the operating-system layer)
         uses: anchore/sbom-action@v0
         with: { image: tigeris-app, format: cyclonedx-json, output-file: tigeris-app.image.cdx.json }
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with: { name: image-sbom, path: tigeris-app.image.cdx.json }
