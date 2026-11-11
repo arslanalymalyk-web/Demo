@@ -2,13 +2,13 @@ import type pg from "pg";
 import { audit } from "../../ingest/src/store.js";
 import { ROLE_PERMISSIONS } from "./permissions.js";
 
-export interface Principal { id: string; issuer: string; subject: string; displayName: string | null; roles: string[]; disabled: boolean }
+export interface Principal { id: string; issuer: string; subject: string; displayName: string | null; roles: string[]; disabled: boolean; sessionsValidAfter: Date | null }
 export class IdentityError extends Error { constructor(message: string, readonly code: "not_found" | "conflict" | "invalid") { super(message); } }
 
-const SELECT = `SELECT p.id, p.idp_issuer, p.idp_subject, p.display_name, p.disabled_at,
+const SELECT = `SELECT p.id, p.idp_issuer, p.idp_subject, p.display_name, p.disabled_at, p.sessions_valid_after,
   COALESCE(array_agg(r.key ORDER BY r.key) FILTER (WHERE r.key IS NOT NULL), '{}') AS roles
   FROM principals p LEFT JOIN principal_roles pr ON pr.principal_id = p.id AND pr.institution_id = p.institution_id LEFT JOIN roles r ON r.id = pr.role_id AND r.institution_id = pr.institution_id`;
-const map = (r: Record<string, unknown>): Principal => ({ id: r.id as string, issuer: r.idp_issuer as string, subject: r.idp_subject as string, displayName: (r.display_name as string | null) ?? null, roles: r.roles as string[], disabled: r.disabled_at !== null });
+const map = (r: Record<string, unknown>): Principal => ({ id: r.id as string, issuer: r.idp_issuer as string, subject: r.idp_subject as string, displayName: (r.display_name as string | null) ?? null, roles: r.roles as string[], disabled: r.disabled_at !== null, sessionsValidAfter: r.sessions_valid_after ? new Date(r.sessions_valid_after as string) : null });
 
 export async function findPrincipal(c: pg.PoolClient, issuer: string, subject: string): Promise<Principal | null> {
   const r = await c.query(`${SELECT} WHERE p.idp_issuer = $1 AND p.idp_subject = $2 GROUP BY p.id`, [issuer, subject]);
@@ -70,4 +70,12 @@ export async function setDisabled(c: pg.PoolClient, institutionId: string, actor
   await c.query("UPDATE principals SET disabled_at = CASE WHEN $2 THEN COALESCE(disabled_at, now()) ELSE NULL END WHERE id = $1", [principalId, disabled]);
   await audit(c, institutionId, { actorType: actor.type, ...(actor.id ? { actorId: actor.id } : {}), action: disabled ? "identity.principal_disabled" : "identity.principal_enabled", objectType: "principal", objectId: principalId, payload: {} });
   return (await getPrincipal(c, principalId))!;
+}
+
+/** Ends every session of one person (or, with no person, of everyone) at this moment: tokens issued earlier are refused from now on. Returns how many people were affected. */
+export async function revokeSessions(c: pg.PoolClient, institutionId: string, actor: { type: string; id?: string }, principalId: string | null, reason: string): Promise<number> {
+  if (principalId !== null && !(await getPrincipal(c, principalId))) throw new IdentityError("principal not found", "not_found");
+  const n = (await c.query("UPDATE principals SET sessions_valid_after = clock_timestamp() WHERE ($1::uuid IS NULL OR id = $1)", [principalId])).rowCount ?? 0;
+  await audit(c, institutionId, { actorType: actor.type, ...(actor.id ? { actorId: actor.id } : {}), action: principalId ? "identity.sessions_revoked" : "identity.sessions_revoked_all", objectType: principalId ? "principal" : "institution", objectId: principalId ?? institutionId, payload: { reason, people: n } });
+  return n;
 }

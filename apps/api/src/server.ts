@@ -7,7 +7,7 @@ import type pg from "pg";
 import { z } from "zod";
 import { PostgresGraph } from "../../../packages/graph/src/index.js";
 import { EPISODE, PACKS, TEMPLATES, createRun, episodeBacktestIfStored, getRun, listRuns, listRunsPage, replayRun } from "../../../packages/scenario/src/index.js";
-import { AuthError, IdentityError, findPrincipal, listPrincipals, permissionsOf, provisionPrincipal, setDisabled, setRoles, type Permission, type Principal, type TokenVerifier } from "../../../packages/identity/src/index.js";
+import { AuthError, IdentityError, findPrincipal, listPrincipals, permissionsOf, getLockdown, provisionPrincipal, revokeSessions, setDisabled, setLockdown, setRoles, type Permission, type Principal, type TokenVerifier } from "../../../packages/identity/src/index.js";
 import { audit } from "../../../packages/ingest/src/store.js";
 import { PagingError, keysetPage, likePattern, type Page } from "../../../packages/core/src/index.js";
 import { CaseError, addEvidence, addParticipant, addRecommendation, openCaseFromSignal, addScenario, closeCase, createCase, decide, getCase, listCases, listCasesPage, listHandoffsPage, searchMemoryPage, startAnalysis, submitForReview, updateHandoff } from "../../../packages/cases/src/index.js";
@@ -21,6 +21,7 @@ import { ReasoningError, listCalls, runReasoning, type ModelAdapter } from "../.
 import { CATEGORIES, MUTABLE, backupStatus, sendTest, type AlertRunner, type Mailer } from "../../../packages/alerts/src/index.js";
 import { installationReadiness } from "../../../packages/setup/src/index.js";
 import { SchedulerError, pauseSource, requestRun, resumeSource, sourceHealth, type Scheduler } from "../../../packages/scheduler/src/index.js";
+import { takeCheckpoint, verifyCheckpoint } from "../../../packages/ingest/src/anchor.js";
 import { getLineage, verifyAuditChain } from "../../../packages/ingest/src/lineage.js";
 import { withTenant } from "../../../packages/ingest/src/store.js";
 
@@ -42,6 +43,9 @@ const policyBody = z.object({ rules: z.unknown(), authority: z.unknown() });
 const principalBody = z.object({ issuer: z.string().min(1).max(500), subject: z.string().min(1).max(500), displayName: z.string().max(200).nullish(), roles: z.array(z.string()).max(7) });
 const rolesBody = z.object({ roles: z.array(z.string()).max(7) });
 
+/** The routes that still answer during a lockdown: finding out what happened, ending sessions and people's access, and switching the lockdown off. Everything else is refused, including model calls, uploads and scheduled fetches. */
+const LOCKDOWN_OK = new Set(["GET /v1/identity/me", "POST /v1/identity/me/sign-out", "GET /v1/identity/principals", "POST /v1/identity/principals/:id/disable", "POST /v1/identity/principals/:id/enable", "POST /v1/identity/principals/:id/revoke-sessions", "POST /v1/identity/revoke-all-sessions", "PUT /v1/identity/principals/:id/roles", "GET /v1/lockdown", "POST /v1/lockdown", "GET /v1/audit/verify", "GET /v1/audit/checkpoint", "POST /v1/audit/checkpoint/verify", "GET /v1/readiness"]);
+
 /** Permission needed by each route. `null` means any authenticated, active principal. A route that is not listed here is refused. */
 const ACCESS: Record<string, Permission | null | "public"> = {
   "GET /health": "public",
@@ -52,6 +56,11 @@ const ACCESS: Record<string, Permission | null | "public"> = {
   "POST /v1/identity/principals": "identity.manage",
   "PUT /v1/identity/principals/:id/roles": "identity.manage",
   "POST /v1/identity/principals/:id/disable": "identity.manage",
+  "POST /v1/identity/principals/:id/revoke-sessions": "identity.manage",
+  "POST /v1/identity/revoke-all-sessions": "identity.manage",
+  "POST /v1/identity/me/sign-out": null,
+  "GET /v1/lockdown": "identity.read",
+  "POST /v1/lockdown": "identity.manage",
   "POST /v1/identity/principals/:id/enable": "identity.manage",
   "GET /v1/sources": "sources.read",
   "GET /v1/evidence": "evidence.read",
@@ -68,6 +77,8 @@ const ACCESS: Record<string, Permission | null | "public"> = {
   "POST /v1/scenarios/runs": "scenario.run",
   "POST /v1/scenarios/runs/:id/replay": "scenario.read",
   "GET /v1/audit/verify": "audit.verify",
+  "GET /v1/audit/checkpoint": "audit.verify",
+  "POST /v1/audit/checkpoint/verify": "audit.verify",
   "GET /v1/identity/reviewers": "case.write",
   "POST /v1/documents": "document.upload",
   "GET /v1/documents": "document.read",
@@ -127,7 +138,7 @@ declare module "fastify" { interface FastifyRequest { principal?: Principal } }
  * The institution is fixed by deployment configuration (one deployment per institution).
  * Every route except /health needs a bearer token from the institution's identity provider and a provisioned, active principal with the right role.
  */
-export interface ServerOptions { pool: pg.Pool; institutionId: string; verifier: TokenVerifier; documents?: DocumentQueue; clientDataEnabled?: boolean; logger?: FastifyServerOptions["logger"]; rateLimit?: { max: number; timeWindow: string } | null; metricsToken?: string | null; trustProxy?: boolean; reasoning?: { adapter: ModelAdapter; perHour?: number } | null; scheduler?: Scheduler | null; scanner?: Scanner | null; alerts?: { mailer: Mailer; baseUrl: string; runner?: AlertRunner } | null; backupMaxAgeHours?: number }
+export interface ServerOptions { pool: pg.Pool; institutionId: string; verifier: TokenVerifier; auditAnchorKey?: string; documents?: DocumentQueue; clientDataEnabled?: boolean; logger?: FastifyServerOptions["logger"]; rateLimit?: { max: number; timeWindow: string } | null; metricsToken?: string | null; trustProxy?: boolean; reasoning?: { adapter: ModelAdapter; perHour?: number } | null; scheduler?: Scheduler | null; scanner?: Scanner | null; alerts?: { mailer: Mailer; baseUrl: string; runner?: AlertRunner } | null; backupMaxAgeHours?: number }
 
 export function buildServer(opts: ServerOptions): FastifyInstance {
   const app = Fastify({
@@ -211,7 +222,9 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
     if (!principal) return reply.code(403).send({ error: "not_provisioned", message: "no principal for this identity in this institution" });
     const deny = async (reason: string) => { authFailures.inc({ reason: "forbidden" }); await tenant(c => audit(c, opts.institutionId, { actorType: "principal", actorId: principal.id, action: "identity.denied", objectType: "route", objectId: `${req.method} ${route}`, payload: { reason } })); return reply.code(403).send({ error: "forbidden", message: reason }); };
     if (principal.disabled) return deny("principal disabled");
+    if (principal.sessionsValidAfter && (claims.issuedAt === null || claims.issuedAt * 1000 < principal.sessionsValidAfter.getTime())) return unauthorized("this session was ended; sign in again");
     if (need !== null && !permissionsOf(principal.roles).has(need)) return deny(`missing permission ${need}`);
+    if (!LOCKDOWN_OK.has(`${req.method} ${route}`) && (await tenant(c => getLockdown(c))).locked) { authFailures.inc({ reason: "forbidden" }); return reply.code(423).send({ error: "locked_down", message: "the institution is in lockdown; only administrators and auditors can use the investigation and release routes" }); }
     req.principal = principal;
   });
 
@@ -248,6 +261,25 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
     if (!id.success || !b.success) return reply.code(400).send({ error: "invalid_request" });
     return identityCall(reply, c => setRoles(c, opts.institutionId, { type: "principal", id: req.principal!.id }, id.data, b.data.roles));
   });
+  const why = z.object({ reason: z.string().trim().min(5).max(300) });
+  app.get("/v1/lockdown", async () => tenant(c => getLockdown(c)));
+  app.post("/v1/lockdown", async (req, reply) => {
+    const b = z.object({ locked: z.boolean(), reason: z.string().trim().min(5).max(300) }).safeParse(req.body);
+    if (!b.success) return reply.code(400).send({ error: "invalid_request" });
+    return identityCall(reply, c => setLockdown(c, opts.institutionId, { type: "principal", id: req.principal!.id }, b.data.locked, b.data.reason));
+  });
+  app.post("/v1/identity/principals/:id/revoke-sessions", async (req, reply) => {
+    const id = uuid.safeParse((req.params as { id: string }).id), b = why.safeParse(req.body);
+    if (!id.success || !b.success) return reply.code(400).send({ error: "invalid_request" });
+    return identityCall(reply, async c => ({ revoked: await revokeSessions(c, opts.institutionId, { type: "principal", id: req.principal!.id }, id.data, b.data.reason) }));
+  });
+  // Emergency: ends everyone's sessions, the caller's included. Each person signs in again with the identity provider.
+  app.post("/v1/identity/revoke-all-sessions", async (req, reply) => {
+    const b = why.safeParse(req.body);
+    if (!b.success) return reply.code(400).send({ error: "invalid_request" });
+    return identityCall(reply, async c => ({ revoked: await revokeSessions(c, opts.institutionId, { type: "principal", id: req.principal!.id }, null, b.data.reason) }));
+  });
+  app.post("/v1/identity/me/sign-out", async req => tenant(async c => ({ revoked: await revokeSessions(c, opts.institutionId, { type: "principal", id: req.principal!.id }, req.principal!.id, "signed out by the person") })));
   for (const [verb, disabled] of [["disable", true], ["enable", false]] as const) {
     app.post(`/v1/identity/principals/:id/${verb}`, async (req, reply) => {
       const id = uuid.safeParse((req.params as { id: string }).id);
@@ -474,7 +506,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   });
 
   // Installation readiness: what is still open before real use. Read from stored facts and the running configuration.
-  app.get("/v1/readiness", async () => { const sc = await scannerState(); return tenant(c => installationReadiness(c, { clientDataEnabled: opts.clientDataEnabled === true, scanner: { configured: sc.configured, reachable: sc.reachable }, scheduler: { enabled: !!opts.scheduler }, alerts: { configured: !!opts.alerts, transport: opts.alerts?.mailer.transport ?? null }, backupMaxAgeHours: opts.backupMaxAgeHours ?? 0, reasoning: { provider: opts.reasoning ? `${opts.reasoning.adapter.provider} · ${opts.reasoning.adapter.model}` : null } })); });
+  app.get("/v1/readiness", async () => { const sc = await scannerState(); return tenant(c => installationReadiness(c, { clientDataEnabled: opts.clientDataEnabled === true, scanner: { configured: sc.configured, reachable: sc.reachable }, scheduler: { enabled: !!opts.scheduler }, alerts: { configured: !!opts.alerts, transport: opts.alerts?.mailer.transport ?? null }, backupMaxAgeHours: opts.backupMaxAgeHours ?? 0, auditAnchorConfigured: Boolean(opts.auditAnchorKey), reasoning: { provider: opts.reasoning ? `${opts.reasoning.adapter.provider} · ${opts.reasoning.adapter.model}` : null } })); });
   // Source health and scheduled ingestion. The schedule is a governed setting; these routes read state and let an operator run, pause or resume one source.
   app.get("/v1/sources/health", async () => tenant(async c => {
     const { schedule, version } = await effectiveSchedule(c);
@@ -590,5 +622,18 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   app.post("/v1/documents/:id/retry", async (req, reply) => { const id = idOf(req); if (!id.success) return reply.code(400).send({ error: "invalid_id" }); const out = await intake(req, reply, async c => { await retryDocument(c, opts.institutionId, req.principal!.id, id.data); return { ok: true }; }); if (reply.statusCode === 200) opts.documents?.enqueue(id.data); return out; });
 
   app.get("/v1/audit/verify", async () => tenant(c => verifyAuditChain(c)));
+  // A signed statement of where the audit chain stands. Keep it somewhere the database administrator cannot reach; check it later with the verify route.
+  app.get("/v1/audit/checkpoint", async (req, reply) => {
+    if (!opts.auditAnchorKey) return reply.code(409).send({ error: "not_configured", message: "set TIGERIS_AUDIT_ANCHOR_KEY to sign checkpoints" });
+    const cp = await tenant(async c => { const out = await takeCheckpoint(c, opts.institutionId, opts.auditAnchorKey!); await audit(c, opts.institutionId, { actorType: "principal", actorId: req.principal!.id, action: "audit.checkpoint_taken", objectType: "audit", objectId: String(out.seq), payload: { events: out.events } }); return out; });
+    return cp;
+  });
+  const checkpointBody = z.object({ institutionId: z.string().uuid(), events: z.number().int().min(0), seq: z.number().int().min(0), hash: z.string().regex(/^[0-9a-f]{64}$/), at: z.string().max(40), signature: z.string().max(100) });
+  app.post("/v1/audit/checkpoint/verify", async (req, reply) => {
+    if (!opts.auditAnchorKey) return reply.code(409).send({ error: "not_configured", message: "set TIGERIS_AUDIT_ANCHOR_KEY to verify checkpoints" });
+    const b = checkpointBody.safeParse(req.body);
+    if (!b.success) return reply.code(400).send({ error: "invalid_request" });
+    return tenant(c => verifyCheckpoint(c, opts.institutionId, opts.auditAnchorKey!, b.data));
+  });
   return app;
 }

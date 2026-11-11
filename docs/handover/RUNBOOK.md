@@ -85,6 +85,14 @@ If drafts fail with "the model could not be reached", check the egress network, 
 
 Nothing is deleted automatically. Use the Retention screen for the ten-year report, to place or release a legal hold on a case, and to export a case with its integrity hash. Held cases must not be removed from any storage by hand.
 
+## Ending access and stopping the system
+
+- **One person:** Administration, "End sessions" (their tokens stop working at once; they sign in again through the identity provider). "Disable" also blocks them from signing in.
+- **Everyone:** `POST /v1/identity/revoke-all-sessions` with a reason. Everyone, including you, signs in again.
+- **Session length:** tokens are honoured for `OIDC_MAX_TOKEN_AGE_SECONDS` (eight hours by default) after the provider issued them. Set shorter in the provider as well.
+- **Emergency stop:** Administration, "Emergency stop", with a reason. Reading, uploads, model calls and scheduled fetches are refused for everyone; administrators and auditors can still see people, end sessions, check the audit trail and release the stop. It is a software stop: for a harder one, also suspend the egress network on the host.
+- **Audit checkpoints:** set `TIGERIS_AUDIT_ANCHOR_KEY` (at least 32 characters, from the secret store, not readable by the database administrator). An auditor takes a checkpoint on the Audit page weekly and keeps the file somewhere the database administrator cannot change, and checks the newest one after any incident or any maintenance by someone with full database rights.
+
 ## Incident basics
 
-1. Note the time and request ids. 2. Preserve logs and the latest backup. 3. Check the audit chain (`deploy/backup/verify-audit.sql`); a broken chain is a serious incident. 4. Revoke access by removing roles. 5. Tell Tiger Capital AI and the client's security contact. 6. Restore only if the data is damaged, following [BACKUP-RESTORE.md](BACKUP-RESTORE.md).
+1. Note the time and request ids. 2. Preserve logs and the latest backup. 3. Check the audit chain (`deploy/backup/verify-audit.sql`); a broken chain is a serious incident. 4. End sessions and disable the people involved (see "Ending access and stopping the system"); use the emergency stop if the cause is not yet understood. Check the newest saved audit checkpoint. 5. Tell Tiger Capital AI and the client's security contact. 6. Restore only if the data is damaged, following [BACKUP-RESTORE.md](BACKUP-RESTORE.md).

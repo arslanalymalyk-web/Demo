@@ -6,7 +6,7 @@ import { effectiveSchedule } from "../../settings/src/index.js";
 import { claimDue, raiseHealthCases, recordOutcome, syncSchedule, type Claimed } from "./service.js";
 
 export type RunJob = (k: { sourceKey: string; mode: "catalog" | "series" }) => Promise<void>;
-export interface SchedulerOptions { pool: pg.Pool; institutionId: string; run: RunJob; tickMs?: number; claimMs?: number; runTimeoutMs?: number; maxRunsPerTick?: number; now?: () => Date; log?: (msg: string, o?: object) => void }
+export interface SchedulerOptions { pool: pg.Pool; institutionId: string; run: RunJob; tickMs?: number; claimMs?: number; runTimeoutMs?: number; maxRunsPerTick?: number; now?: () => Date; halted?: () => Promise<boolean>; log?: (msg: string, o?: object) => void }
 export interface TickResult { ran: { source: string; ok: boolean; error?: string }[]; casesOpened: string[] }
 
 /** Runs one scheduled source ingestion at a time, in this process. One deployment is one node; the atomic claim in the database also keeps a second instance from running the same source. */
@@ -36,6 +36,7 @@ export class Scheduler {
 
   private async pass(): Promise<TickResult> {
     const o = this.o, now = o.now ?? (() => new Date()), inst = o.institutionId, out: TickResult = { ran: [], casesOpened: [] };
+    if (await o.halted?.()) { o.log?.("scheduled ingestion is paused by lockdown"); return out; }
     await withTenant(o.pool, inst, c => syncSchedule(c, inst, now()));
     const pauseAfter = (await withTenant(o.pool, inst, c => effectiveSchedule(c))).schedule.pauseAfterFailures;
     for (let n = 0; n < (o.maxRunsPerTick ?? 10); n++) {

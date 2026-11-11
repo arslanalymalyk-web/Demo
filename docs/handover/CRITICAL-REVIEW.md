@@ -10,7 +10,7 @@ An honest look at the build as it stands: what is strong, what this review found
 - **Numbers are computed by code and verified.** Deterministic scenario engine with exact replay; the model assistant can only return cited text whose every number is checked against stored facts, rejected whole on any failure; notices by email carry no figures.
 - **Two-person control** on settings, policy and the ingestion schedule; separation of duty for decisions.
 - **Failure is designed for.** Fail-closed malware scanning, back-off and auto-pause for sources, retry and give-up for alerts, a restore drill proved on a real cluster, an error boundary on every screen.
-- **Tested end to end.** 325 unit and integration tests against a real database and 34 browser tests against the real API, including Arabic and right-to-left at phone width.
+- **Tested end to end.** 338 unit and integration tests against a real database and 36 browser tests against the real API, including Arabic and right-to-left at phone width.
 - **Honest documentation.** Every handover document says what was not verified; the verification report lists 19 numbered gaps.
 
 ## Found and fixed in this review
@@ -48,7 +48,7 @@ These need something only a person or a real environment can give. None blocks s
 2. ~~Monitor base-backup age.~~ **Done:** the backup script now records each run (good or failed) in the database; a missed, failed or never-recorded backup alerts administrators, blocks Readiness and appears in metrics. Still to do: schedule the job in the client's environment and run the restore drill there.
 3. ~~Pagination and search on large lists.~~ **Done:** cases, documents, handoffs, memory, evidence, scenario runs and the model call log are read newest first in pages with a total and a "Load more" control, using a cursor that stays correct while records are added. Cases, documents, memory and evidence can be searched or filtered. Restricted cases are neither listed nor counted for people who may not see them. Measured to 200,000 cases and 1,000,000 evidence records with `pnpm scale` (see verification item 21); search is a scan and takes up to about a second at that size.
 4. **Soak and large-data tests.** Large data is now measured for the paged lists (see item 3). Still to do: run the schedulers, alert runner and document queue for days, and measure through the proxy on the client's hardware.
-5. **Token revocation.** Tokens are valid until they expire and are held in memory only. Set short lifetimes in the identity provider; consider a server-side deny list for an urgent removal.
+5. ~~Token revocation.~~ **Done:** a maximum token age, per-person and institution-wide session revocation, sign-out that ends every session, and an emergency stop. Disabling a person was already immediate. See [SOVEREIGNTY.md](SOVEREIGNTY.md) for the wider audit and what is still missing.
 6. **High availability.** One node with fast restore was the chosen design. If the client needs it, the next step is a standby database and a second API node (the scheduler and alert runner already claim work atomically).
 7. **Browsers and assistive technology.** Only Chromium is automated, and accessibility is checked structurally and for contrast. A manual WCAG audit with a screen reader should precede a client launch.
 8. **Secrets scanning in CI** and a signed release process (images signed, bill of materials attached to each release).

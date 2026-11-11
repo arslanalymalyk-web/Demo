@@ -16,7 +16,52 @@ export function Audit(): ReactNode {
           <div className="card"><button onClick={() => setN(x => x + 1)}>Verify again</button></div>
         </div>
       )}</Async>
+      <Checkpoints />
     </>
+  );
+}
+
+function Checkpoints(): ReactNode {
+  const [text, setText] = useState(""), [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null), [busy, setBusy] = useState(false);
+  const run = async (f: () => Promise<void>) => { setBusy(true); setMsg(null); try { await f(); } catch (e) { setMsg({ ok: false, text: e instanceof ApiError ? e.message : "The request failed." }); } finally { setBusy(false); } };
+  const take = () => run(async () => {
+    const cp = await api<{ seq: number; events: number }>("/v1/audit/checkpoint");
+    const url = URL.createObjectURL(new Blob([JSON.stringify(cp, null, 2)], { type: "application/json" })), a = document.createElement("a");
+    a.href = url; a.download = `audit-checkpoint-${cp.events}-events.json`; a.click(); URL.revokeObjectURL(url);
+    setMsg({ ok: true, text: `Checkpoint saved: ${cp.events} events, up to event ${cp.seq}. Keep the file where the database administrator cannot change it.` });
+  });
+  const check = () => run(async () => {
+    let cp: unknown; try { cp = JSON.parse(text); } catch { setMsg({ ok: false, text: "That is not a checkpoint file." }); return; }
+    const r = await api<{ ok: boolean; events?: number; detail?: string }>("/v1/audit/checkpoint/verify", { method: "POST", body: cp });
+    setMsg(r.ok ? { ok: true, text: `Nothing up to the checkpoint has changed. The chain now holds ${r.events} events.` } : { ok: false, text: r.detail ?? "The checkpoint does not match." });
+  });
+  return (
+    <div style={{ marginTop: 16 }}><Card title="Checkpoints">
+      <p className="small muted">The chain shows that no event was changed without the next one noticing. A checkpoint also shows that the whole chain was not rewritten, by someone with full database rights, after you took it. Save one regularly and keep it off this server.</p>
+      <div className="row"><button onClick={take} disabled={busy}>Take a checkpoint</button></div>
+      <form className="stack" style={{ marginTop: 12 }} onSubmit={e => { e.preventDefault(); void check(); }}>
+        <label>Check a saved checkpoint<textarea rows={4} value={text} onChange={e => setText(e.target.value)} placeholder="Paste the contents of a checkpoint file" className="mono" /></label>
+        <div><button disabled={busy || text.trim() === ""}>Check it</button></div>
+      </form>
+      {msg ? <div className={`note ${msg.ok ? "ok" : "err"}`} role={msg.ok ? "status" : "alert"} style={{ marginTop: 10 }}>{msg.text}</div> : null}
+    </Card></div>
+  );
+}
+
+function Lockdown(): ReactNode {
+  const st = useApi<{ locked: boolean; reason: string | null; changedAt: string | null }>("/v1/lockdown");
+  const [reason, setReason] = useState(""), [err, setErr] = useState<string | null>(null), [busy, setBusy] = useState(false);
+  const flip = async (locked: boolean) => { setBusy(true); setErr(null); try { await api("/v1/lockdown", { method: "POST", body: { locked, reason } }); setReason(""); st.reload(); } catch (e) { setErr(e instanceof ApiError ? e.message : "The change failed."); } finally { setBusy(false); } };
+  return (
+    <div style={{ marginTop: 16 }}><Card title="Emergency stop" aside={st.data ? <span className={`badge ${st.data.locked ? "b-bad" : "b-ok"}`}>{st.data.locked ? "Locked down" : "Normal"}</span> : undefined}>
+      <p className="small muted">A lockdown refuses every ordinary request: reading, uploads, model calls and scheduled fetches. Administrators and auditors can still see who has access, end sessions, check the audit trail and switch the lockdown off. Both changes are recorded with the reason.</p>
+      {st.data?.locked ? <div className="note err" role="status">Locked down: {st.data.reason}</div> : null}
+      {st.data ? <form className="row" onSubmit={e => { e.preventDefault(); void flip(!st.data?.locked); }}>
+        <label style={{ flex: 1 }}>Reason<input required minLength={5} maxLength={300} value={reason} onChange={e => setReason(e.target.value)} /></label>
+        <button className={st.data.locked ? "primary" : ""} disabled={busy} style={{ alignSelf: "flex-end" }}>{st.data.locked ? "Release lockdown" : "Start lockdown"}</button>
+      </form> : <div className="skeleton" style={{ width: "50%" }} />}
+      {err ? <div className="note err" role="alert" style={{ marginTop: 10 }}>{err}</div> : null}
+    </Card></div>
   );
 }
 
@@ -36,9 +81,10 @@ export function Admin({ can }: { can: (p: string) => boolean }): ReactNode {
             <tbody>{rows.map(p => <tr key={p.id}><td>{p.displayName ?? "—"}</td><td className="mono">{p.subject}<div className="small muted">{p.issuer}</div></td>
               <td>{manage ? <fieldset style={{ border: 0, padding: 0, margin: 0 }}><legend className="sr-only">Roles for {p.subject}</legend>{ROLES.map(r => <label key={r} style={{ flexDirection: "row", alignItems: "center", marginInlineEnd: 10 }}><input type="checkbox" checked={p.roles.includes(r)} onChange={e => act(() => api(`/v1/identity/principals/${p.id}/roles`, { method: "PUT", body: { roles: e.target.checked ? [...p.roles, r] : p.roles.filter(x => x !== r) } }), "Roles updated.")} />{r}</label>)}</fieldset> : p.roles.join(", ") || "none"}</td>
               <td>{p.disabled ? <span className="badge b-bad">Disabled</span> : <span className="badge b-ok">Active</span>}</td>
-              {manage ? <td><button onClick={() => act(() => api(`/v1/identity/principals/${p.id}/${p.disabled ? "enable" : "disable"}`, { method: "POST" }), p.disabled ? "Enabled." : "Disabled.")}>{p.disabled ? "Enable" : "Disable"}</button></td> : null}</tr>)}</tbody></Table>
+              {manage ? <td><button onClick={() => act(() => api(`/v1/identity/principals/${p.id}/${p.disabled ? "enable" : "disable"}`, { method: "POST" }), p.disabled ? "Enabled." : "Disabled.")}>{p.disabled ? "Enable" : "Disable"}</button> <button onClick={() => { const why = window.prompt(`Why are you ending ${p.displayName ?? p.subject}'s sessions?`); if (why && why.trim().length >= 5) void act(() => api(`/v1/identity/principals/${p.id}/revoke-sessions`, { method: "POST", body: { reason: why } }), "Sessions ended. They must sign in again."); }}>End sessions</button></td> : null}</tr>)}</tbody></Table>
         )}</Async>
       </Card>
+      {manage ? <Lockdown /> : null}
       {manage ? (
         <div style={{ marginTop: 16 }}><Card title="Add a person">
           <form className="row" onSubmit={e => { e.preventDefault(); void act(async () => { await api("/v1/identity/principals", { method: "POST", body: { issuer: form.issuer, subject: form.subject, displayName: form.displayName || null, roles: form.roles } }); setForm({ issuer: form.issuer, subject: "", displayName: "", roles: [] }); }, "Person added."); }}>

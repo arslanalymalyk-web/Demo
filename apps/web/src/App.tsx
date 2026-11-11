@@ -74,7 +74,7 @@ export default function App(): ReactNode {
 
   if (phase.name === "starting") return <div className="signin" role="status">{t("Signing in…")}</div>;
   if (phase.name === "signed-out") return <SignIn {...(phase.error ? { error: phase.error } : {})} />;
-  if (phase.name === "denied") return <main className="signin" id="main"><div className="card panel"><h1>TIGERIS</h1><div className="note err" role="alert">{phase.message}</div><p>{t("Your identity is valid, but you have not been given access to this institution. Ask an administrator to add you.")}</p><button onClick={() => { setToken(null); setPhase({ name: "signed-out" }); }}>{t("Back")}</button></div></main>;
+  if (phase.name === "denied") return <main className="signin" id="main"><div className="card panel"><h1>TIGERIS</h1><div className="note err" role="alert">{phase.message}</div><p>{t("Your identity is valid, but you have not been given access to this institution. Ask an administrator to add you.")}</p><button onClick={() => { void api("/v1/identity/me/sign-out", { method: "POST", body: {} }).catch(() => undefined).finally(() => { setToken(null); setPhase({ name: "signed-out" }); }); }}>{t("Back")}</button></div></main>;
 
   const me = phase.me, can = (p: string) => me.permissions.includes(p);
   const allowed = (need: string | null) => need === null || can(need);

@@ -6,7 +6,9 @@ _Confidential. Property of Tiger Capital AI. Prepared for Tiger Capital AI and t
 
 | Threat | Main controls |
 |---|---|
-| Stolen or forged token | Signature, issuer, audience, expiry and multi-factor claim checks; unsigned and symmetric-key tokens refused; token held in browser memory only |
+| Stolen or forged token | Signature, issuer, audience, expiry and multi-factor claim checks; unsigned and symmetric-key tokens refused; token held in browser memory only; maximum token age; sessions can be ended per person or for everyone; sign-out ends all of a person's sessions |
+| Database administrator rewrites history | Append-only triggers and the hash chain catch edits; a rewrite of the whole chain is caught only by a signed checkpoint kept off the server (see SOVEREIGNTY.md gap C) |
+| Suspected breach, cause unknown | Emergency stop (lockdown) refuses ordinary use while administrators and auditors investigate |
 | Unprovisioned or over-privileged user | Provisioned principals only; seven roles; default-deny route access map; separation of duty for decisions, settings and policy |
 | Cross-institution data exposure | Forced row-level security on every institution table; runtime role owns nothing and has no BYPASSRLS; start-up check; one deployment per institution |
 | Tampering with records | Immutability triggers on evidence, decisions, policy decisions, case history, memory, settings, exports; per-institution hash-chained audit written in the same transaction; no DELETE or TRUNCATE rights |
