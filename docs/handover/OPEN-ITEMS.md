@@ -43,7 +43,7 @@ _Confidential. Property of Tiger Capital AI. Prepared for the named recipients o
 6. Decide how institution documents are encrypted and searched (SOVEREIGNTY.md gap B): search over text held in memory, or no search over institution documents.
 3. A break-glass sign-in path for when the identity provider is unavailable, and who may use it.
 4. A vendor-access policy: no standing access, how time-limited access is approved and recorded.
-5. Whether granting `administrator` or `approver` should need a second administrator.
+5. (Decided: granting `administrator` or `approver` needs a second administrator. Confirm with the client that two administrators are always available.)
 
 ## Arabic interface
 

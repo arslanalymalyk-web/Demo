@@ -34,6 +34,8 @@ Replace the secret file, restart the service that reads it. For the database pas
 
 ## Add and remove people
 
+Giving someone the `administrator` or `approver` role is a request: a different administrator approves it on the Administration page ("Roles waiting for a second administrator"). Other roles apply at once, and taking any role away is immediate. Check that page when a colleague says they asked for a role. The identity command (`pnpm identity add`) applies everything without approval and is for the first administrators and for break-glass use on the server; its use is recorded in the audit trail as the system.
+
 A person must exist as a provisioned principal with a role before they can use the system. Use the administrator screens or the identity commands. Removing access means removing the role link, which is the only deletion the application is allowed. Keep at least two administrators, because settings activation needs two people.
 
 ## Ingestion

@@ -7,7 +7,7 @@ import type pg from "pg";
 import { z } from "zod";
 import { PostgresGraph } from "../../../packages/graph/src/index.js";
 import { EPISODE, PACKS, TEMPLATES, createRun, episodeBacktestIfStored, getRun, listRuns, listRunsPage, replayRun } from "../../../packages/scenario/src/index.js";
-import { AuthError, IdentityError, findPrincipal, listPrincipals, permissionsOf, getLockdown, provisionPrincipal, revokeSessions, setDisabled, setLockdown, setRoles, type Permission, type Principal, type TokenVerifier } from "../../../packages/identity/src/index.js";
+import { AuthError, IdentityError, PRIVILEGED_ROLES, changeRoles, decideGrantRequest, findPrincipal, listGrantRequests, requestForNewPerson, listPrincipals, permissionsOf, getLockdown, provisionPrincipal, revokeSessions, setDisabled, setLockdown, setRoles, type Permission, type Principal, type TokenVerifier } from "../../../packages/identity/src/index.js";
 import { audit } from "../../../packages/ingest/src/store.js";
 import { PagingError, keysetPage, likePattern, type Page } from "../../../packages/core/src/index.js";
 import { CaseError, addEvidence, addParticipant, addRecommendation, openCaseFromSignal, addScenario, closeCase, createCase, decide, getCase, listCases, listCasesPage, listHandoffsPage, searchMemoryPage, startAnalysis, submitForReview, updateHandoff } from "../../../packages/cases/src/index.js";
@@ -44,7 +44,7 @@ const principalBody = z.object({ issuer: z.string().min(1).max(500), subject: z.
 const rolesBody = z.object({ roles: z.array(z.string()).max(7) });
 
 /** The routes that still answer during a lockdown: finding out what happened, ending sessions and people's access, and switching the lockdown off. Everything else is refused, including model calls, uploads and scheduled fetches. */
-const LOCKDOWN_OK = new Set(["GET /v1/identity/me", "POST /v1/identity/me/sign-out", "GET /v1/identity/principals", "POST /v1/identity/principals/:id/disable", "POST /v1/identity/principals/:id/enable", "POST /v1/identity/principals/:id/revoke-sessions", "POST /v1/identity/revoke-all-sessions", "PUT /v1/identity/principals/:id/roles", "GET /v1/lockdown", "POST /v1/lockdown", "GET /v1/audit/verify", "GET /v1/audit/checkpoint", "POST /v1/audit/checkpoint/verify", "GET /v1/readiness"]);
+const LOCKDOWN_OK = new Set(["GET /v1/identity/me", "POST /v1/identity/me/sign-out", "GET /v1/identity/principals", "POST /v1/identity/principals/:id/disable", "POST /v1/identity/principals/:id/enable", "POST /v1/identity/principals/:id/revoke-sessions", "POST /v1/identity/revoke-all-sessions", "PUT /v1/identity/principals/:id/roles", "GET /v1/lockdown", "POST /v1/lockdown", "GET /v1/identity/role-requests", "POST /v1/identity/role-requests/:id/:verb", "GET /v1/audit/verify", "GET /v1/audit/checkpoint", "POST /v1/audit/checkpoint/verify", "GET /v1/readiness"]);
 
 /** Permission needed by each route. `null` means any authenticated, active principal. A route that is not listed here is refused. */
 const ACCESS: Record<string, Permission | null | "public"> = {
@@ -55,6 +55,8 @@ const ACCESS: Record<string, Permission | null | "public"> = {
   "GET /v1/identity/principals": "identity.read",
   "POST /v1/identity/principals": "identity.manage",
   "PUT /v1/identity/principals/:id/roles": "identity.manage",
+  "GET /v1/identity/role-requests": "identity.read",
+  "POST /v1/identity/role-requests/:id/:verb": "identity.manage",
   "POST /v1/identity/principals/:id/disable": "identity.manage",
   "POST /v1/identity/principals/:id/revoke-sessions": "identity.manage",
   "POST /v1/identity/revoke-all-sessions": "identity.manage",
@@ -253,13 +255,23 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   app.post("/v1/identity/principals", async (req, reply) => {
     const b = principalBody.safeParse(req.body);
     if (!b.success) return reply.code(400).send({ error: "invalid_body", details: b.error.flatten() });
-    const r = await identityCall(reply, c => provisionPrincipal(c, opts.institutionId, { type: "principal", id: req.principal!.id }, { ...b.data, displayName: b.data.displayName ?? null }));
+    const actor = { type: "principal", id: req.principal!.id }, privileged = b.data.roles.filter(x => (PRIVILEGED_ROLES as readonly string[]).includes(x));
+    const r = await identityCall(reply, async c => {
+      const p = await provisionPrincipal(c, opts.institutionId, actor, { ...b.data, roles: b.data.roles.filter(x => !privileged.includes(x)), displayName: b.data.displayName ?? null });
+      return { ...p, pendingGrant: await requestForNewPerson(c, opts.institutionId, actor, p.id, privileged) };
+    });
     return r && "id" in (r as object) ? reply.code(201).send(r) : r;
   });
   app.put("/v1/identity/principals/:id/roles", async (req, reply) => {
     const id = uuid.safeParse((req.params as { id: string }).id), b = rolesBody.safeParse(req.body);
     if (!id.success || !b.success) return reply.code(400).send({ error: "invalid_request" });
-    return identityCall(reply, c => setRoles(c, opts.institutionId, { type: "principal", id: req.principal!.id }, id.data, b.data.roles));
+    return identityCall(reply, async c => { const r = await changeRoles(c, opts.institutionId, { type: "principal", id: req.principal!.id }, id.data, b.data.roles); return { ...r.principal, pendingGrant: r.pending }; });
+  });
+  app.get("/v1/identity/role-requests", async () => tenant(c => listGrantRequests(c)));
+  app.post("/v1/identity/role-requests/:id/:verb", async (req, reply) => {
+    const p = req.params as { id: string; verb: string }, id = uuid.safeParse(p.id), b = z.object({ note: z.string().trim().max(300).optional() }).safeParse(req.body ?? {});
+    if (!id.success || !b.success || !["approve", "reject"].includes(p.verb)) return reply.code(400).send({ error: "invalid_request" });
+    return identityCall(reply, c => decideGrantRequest(c, opts.institutionId, { type: "principal", id: req.principal!.id }, id.data, p.verb === "approve", b.data.note ?? null));
   });
   const why = z.object({ reason: z.string().trim().min(5).max(300) });
   app.get("/v1/lockdown", async () => tenant(c => getLockdown(c)));

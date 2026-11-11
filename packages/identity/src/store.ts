@@ -22,7 +22,7 @@ export async function listPrincipals(c: pg.PoolClient): Promise<Principal[]> {
   return (await c.query(`${SELECT} GROUP BY p.id ORDER BY p.created_at, p.id`)).rows.map(map);
 }
 
-async function assertRoles(c: pg.PoolClient, roles: string[]): Promise<void> {
+export async function assertRoles(c: pg.PoolClient, roles: string[]): Promise<void> {
   const known = new Set(Object.keys(ROLE_PERMISSIONS));
   const bad = roles.filter(r => !known.has(r));
   if (bad.length) throw new IdentityError(`unknown role: ${bad.join(", ")}`, "invalid");
@@ -31,7 +31,7 @@ async function assertRoles(c: pg.PoolClient, roles: string[]): Promise<void> {
   if (missing.length) throw new IdentityError(`role not defined for this institution: ${missing.join(", ")}`, "invalid");
 }
 
-async function writeRoles(c: pg.PoolClient, institutionId: string, principalId: string, roles: string[]): Promise<void> {
+export async function writeRoles(c: pg.PoolClient, institutionId: string, principalId: string, roles: string[]): Promise<void> {
   await c.query("DELETE FROM principal_roles WHERE institution_id = $1 AND principal_id = $2", [institutionId, principalId]);
   for (const key of new Set(roles)) await c.query("INSERT INTO principal_roles (institution_id, principal_id, role_id) SELECT $1, $2, id FROM roles WHERE key = $3", [institutionId, principalId, key]);
 }

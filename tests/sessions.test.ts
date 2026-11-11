@@ -201,3 +201,71 @@ suite("the emergency stop", () => {
     halted = false; expect(ran).toEqual([]);
   });
 });
+
+suite("granting authority needs a second administrator", () => {
+  let owner: pg.Pool, app: pg.Pool;
+  beforeAll(() => { owner = new pg.Pool({ connectionString: ownerUrl! }); app = new pg.Pool({ connectionString: appUrl! }); });
+  afterAll(async () => { await owner.end(); await app.end(); });
+
+  async function scene() {
+    const id = randomUUID();
+    await withTenant(owner, id, async c => { await c.query("INSERT INTO institutions (id, name) VALUES ($1,'G')", [id]); });
+    await addUser(owner, app, id, "boss1", ["administrator"]); await addUser(owner, app, id, "boss2", ["administrator"]); await addUser(owner, app, id, "ana", ["analyst"]); await addUser(owner, app, id, "aud", ["auditor"]);
+    const server = buildServer({ pool: app, institutionId: id, verifier: verifier() });
+    const call = async (who: string, method: "GET" | "POST" | "PUT", url: string, body?: unknown) => { const r = await server.inject({ method, url, headers: { authorization: `Bearer ${await mint(who)}` }, ...(body !== undefined ? { payload: body as object } : {}) }); let json: any = null; try { json = r.json(); } catch { /* none */ } return { status: r.statusCode, json }; };
+    const pid = (sub: string) => withTenant(app, id, async c => (await c.query("SELECT id FROM principals WHERE idp_subject = $1", [sub])).rows[0].id as string);
+    const roles = async (sub: string) => (await call("boss1", "GET", "/v1/identity/principals")).json.find((p: any) => p.subject === sub).roles as string[];
+    return { id, call, pid, roles };
+  }
+
+  it("holds a grant of administrator until the other administrator approves it, and applies the rest at once", async () => {
+    const s = await scene(), ana = await s.pid("ana");
+    const r = await s.call("boss1", "PUT", `/v1/identity/principals/${ana}/roles`, { roles: ["analyst", "expert", "administrator"] });
+    expect(r.status).toBe(200); expect(r.json.roles.sort()).toEqual(["analyst", "expert"]); expect(r.json.pendingGrant).toMatchObject({ roles: ["administrator"], status: "pending" });
+    expect(await s.roles("ana")).not.toContain("administrator");
+    const again = await s.call("boss1", "PUT", `/v1/identity/principals/${ana}/roles`, { roles: ["analyst", "expert", "administrator"] });
+    expect(again.json.pendingGrant.id).toBe(r.json.pendingGrant.id); // asking twice does not pile up requests
+    const id = r.json.pendingGrant.id as string;
+    expect((await s.call("boss1", "POST", `/v1/identity/role-requests/${id}/approve`, {})).status).toBe(409); // not by the person who asked
+    expect((await s.call("ana", "POST", `/v1/identity/role-requests/${id}/approve`, {})).status).toBe(403); // not by someone without authority
+    expect((await s.call("boss2", "GET", "/v1/identity/role-requests")).json[0]).toMatchObject({ id, subject: "ana", status: "pending" });
+    const ok = await s.call("boss2", "POST", `/v1/identity/role-requests/${id}/approve`, { note: "Covers the night shift" });
+    expect(ok.json).toMatchObject({ status: "approved" });
+    expect(await s.roles("ana")).toEqual(expect.arrayContaining(["administrator", "analyst", "expert"]));
+    expect((await s.call("boss2", "POST", `/v1/identity/role-requests/${id}/approve`, {})).status).toBe(409); // already decided
+    const trail = await withTenant(app, s.id, async c => (await c.query("SELECT action FROM audit_events WHERE action LIKE 'identity.role_grant_%' ORDER BY seq")).rows.map(x => x.action));
+    expect(trail).toEqual(["identity.role_grant_requested", "identity.role_grant_approved"]);
+  });
+
+  it("does not let a person approve a role for themselves, lets the asker withdraw, and lets rejection stand", async () => {
+    const s = await scene(), ana = await s.pid("ana");
+    const a = (await s.call("boss1", "PUT", `/v1/identity/principals/${ana}/roles`, { roles: ["analyst", "approver"] })).json.pendingGrant.id as string;
+    expect((await s.call("boss2", "POST", `/v1/identity/role-requests/${a}/reject`, { note: "Not needed" })).json).toMatchObject({ status: "rejected", note: "Not needed" });
+    expect(await s.roles("ana")).not.toContain("approver");
+    const b = (await s.call("boss1", "PUT", `/v1/identity/principals/${ana}/roles`, { roles: ["analyst", "approver"] })).json.pendingGrant.id as string;
+    expect((await s.call("boss1", "POST", `/v1/identity/role-requests/${b}/reject`, {})).json).toMatchObject({ status: "rejected" }); // withdrawn by the asker
+    // an administrator cannot grant themselves anything either: they would need the other one
+    const boss1 = await s.pid("boss1");
+    const c = (await s.call("boss1", "PUT", `/v1/identity/principals/${boss1}/roles`, { roles: ["administrator", "approver"] })).json;
+    expect(c.pendingGrant).toMatchObject({ roles: ["approver"] });
+    expect((await s.call("boss1", "POST", `/v1/identity/role-requests/${c.pendingGrant.id}/approve`, {})).status).toBe(409);
+    expect((await s.call("boss2", "POST", `/v1/identity/role-requests/${c.pendingGrant.id}/approve`, {})).status).toBe(200);
+  });
+
+  it("holds the privileged roles of a person created through the API, and still takes privileged roles away at once", async () => {
+    const s = await scene();
+    const made = await s.call("boss1", "POST", "/v1/identity/principals", { issuer: ISSUER, subject: "newbie", roles: ["analyst", "administrator"] });
+    expect(made.status).toBe(201); expect(made.json.roles).toEqual(["analyst"]); expect(made.json.pendingGrant).toMatchObject({ roles: ["administrator"] });
+    await s.call("boss2", "POST", `/v1/identity/role-requests/${made.json.pendingGrant.id}/approve`, {});
+    expect(await s.roles("newbie")).toEqual(["administrator", "analyst"]);
+    const demote = await s.call("boss1", "PUT", `/v1/identity/principals/${made.json.id}/roles`, { roles: ["analyst"] });
+    expect(demote.json).toMatchObject({ roles: ["analyst"], pendingGrant: null });
+  });
+
+  it("applies everything when set-up or the identity command runs it as the system", async () => {
+    const { changeRoles } = await import("../packages/identity/src/index.js");
+    const s = await scene(), ana = await s.pid("ana");
+    const r = await withTenant(app, s.id, c => changeRoles(c, s.id, { type: "system" }, ana, ["analyst", "administrator"]));
+    expect(r.pending).toBeNull(); expect(r.principal.roles).toContain("administrator");
+  });
+});

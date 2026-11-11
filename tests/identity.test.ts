@@ -114,11 +114,12 @@ suite("identity against a real database and the API", () => {
   });
 
   it("never lets the last active administrator be demoted or disabled", async () => {
-    const { call, admin } = await setup();
+    const { id, call, admin } = await setup();
     const me = (await call(admin, "GET", "/v1/identity/me")).json() as { id: string };
     expect((await call(admin, "PUT", `/v1/identity/principals/${me.id}/roles`, { roles: ["analyst"] })).statusCode).toBe(409);
     expect((await call(admin, "POST", `/v1/identity/principals/${me.id}/disable`)).statusCode).toBe(409);
-    const second = (await call(admin, "POST", "/v1/identity/principals", { issuer: ISSUER, subject: "admin-2", roles: ["administrator"] })).json() as { id: string };
+    await addUser(owner, app, id, "admin-2", ["administrator"]); // set-up runs as the system, so it can create an administrator outright
+    const second = (await call(admin, "GET", "/v1/identity/principals")).json().find((p: { subject: string }) => p.subject === "admin-2") as { id: string };
     expect((await call(admin, "PUT", `/v1/identity/principals/${me.id}/roles`, { roles: ["analyst"] })).statusCode).toBe(200);
     expect((await call(await mint("admin-2"), "POST", `/v1/identity/principals/${second.id}/disable`)).statusCode).toBe(409);
   });

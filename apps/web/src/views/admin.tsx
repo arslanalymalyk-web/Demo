@@ -1,7 +1,9 @@
 import { useState, type ReactNode } from "react";
 import { api, ApiError, ROLES, type PrincipalRow } from "../api";
 import { Async, Card, PageHead, Stat, Table, useApi } from "../components";
-import { num } from "../format";
+import { dateTime, num } from "../format";
+
+interface GrantRow { id: string; subject: string; displayName: string | null; roles: string[]; status: string; requestedAt: string }
 
 export function Audit(): ReactNode {
   const [n, setN] = useState(0);
@@ -70,7 +72,9 @@ export function Admin({ can }: { can: (p: string) => boolean }): ReactNode {
   const manage = can("identity.manage");
   const [err, setErr] = useState<string | null>(null), [msg, setMsg] = useState<string | null>(null);
   const [form, setForm] = useState({ issuer: "", subject: "", displayName: "", roles: [] as string[] });
-  const act = async (f: () => Promise<unknown>, ok: string) => { setErr(null); setMsg(null); try { await f(); setMsg(ok); list.reload(); } catch (e) { setErr(e instanceof ApiError ? e.message : "The change failed."); } };
+  const requests = useApi<GrantRow[]>(manage ? "/v1/identity/role-requests" : null);
+  const held = (r: unknown) => { const g = (r as { pendingGrant?: { roles: string[] } | null } | null)?.pendingGrant; return g ? ` ${g.roles.join(" and ")} is held until a second administrator approves it.` : ""; };
+  const act = async (f: () => Promise<unknown>, ok: string | ((r: unknown) => string)) => { setErr(null); setMsg(null); try { const r = await f(); setMsg(typeof ok === "function" ? ok(r) : ok); list.reload(); requests.reload(); } catch (e) { setErr(e instanceof ApiError ? e.message : "The change failed."); } };
   return (
     <>
       <PageHead title="Administration">People who can sign in, and what each may do. Every change here is written to the audit trail. At least one active administrator must remain.</PageHead>
@@ -79,15 +83,23 @@ export function Admin({ can }: { can: (p: string) => boolean }): ReactNode {
         <Async state={list} empty={d => d.length === 0}>{rows => (
           <Table label="Principals"><thead><tr><th>Person</th><th>Identity provider subject</th><th>Roles</th><th>State</th>{manage ? <th>Actions</th> : null}</tr></thead>
             <tbody>{rows.map(p => <tr key={p.id}><td>{p.displayName ?? "—"}</td><td className="mono">{p.subject}<div className="small muted">{p.issuer}</div></td>
-              <td>{manage ? <fieldset style={{ border: 0, padding: 0, margin: 0 }}><legend className="sr-only">Roles for {p.subject}</legend>{ROLES.map(r => <label key={r} style={{ flexDirection: "row", alignItems: "center", marginInlineEnd: 10 }}><input type="checkbox" checked={p.roles.includes(r)} onChange={e => act(() => api(`/v1/identity/principals/${p.id}/roles`, { method: "PUT", body: { roles: e.target.checked ? [...p.roles, r] : p.roles.filter(x => x !== r) } }), "Roles updated.")} />{r}</label>)}</fieldset> : p.roles.join(", ") || "none"}</td>
+              <td>{manage ? <fieldset style={{ border: 0, padding: 0, margin: 0 }}><legend className="sr-only">Roles for {p.subject}</legend>{ROLES.map(r => <label key={r} style={{ flexDirection: "row", alignItems: "center", marginInlineEnd: 10 }}><input type="checkbox" checked={p.roles.includes(r)} onChange={e => act(() => api(`/v1/identity/principals/${p.id}/roles`, { method: "PUT", body: { roles: e.target.checked ? [...p.roles, r] : p.roles.filter(x => x !== r) } }), r => `Roles updated.${held(r)}`)} />{r}</label>)}</fieldset> : p.roles.join(", ") || "none"}</td>
               <td>{p.disabled ? <span className="badge b-bad">Disabled</span> : <span className="badge b-ok">Active</span>}</td>
               {manage ? <td><button onClick={() => act(() => api(`/v1/identity/principals/${p.id}/${p.disabled ? "enable" : "disable"}`, { method: "POST" }), p.disabled ? "Enabled." : "Disabled.")}>{p.disabled ? "Enable" : "Disable"}</button> <button onClick={() => { const why = window.prompt(`Why are you ending ${p.displayName ?? p.subject}'s sessions?`); if (why && why.trim().length >= 5) void act(() => api(`/v1/identity/principals/${p.id}/revoke-sessions`, { method: "POST", body: { reason: why } }), "Sessions ended. They must sign in again."); }}>End sessions</button></td> : null}</tr>)}</tbody></Table>
         )}</Async>
       </Card>
+      {manage && requests.data && requests.data.some(g => g.status === "pending") ? (
+        <div style={{ marginTop: 16 }}><Card title="Roles waiting for a second administrator">
+          <Table label="Pending role grants"><thead><tr><th>Person</th><th>Role</th><th>Asked</th><th>Actions</th></tr></thead>
+            <tbody>{requests.data.filter(g => g.status === "pending").map(g => <tr key={g.id}><td>{g.displayName ?? g.subject}</td><td>{g.roles.join(", ")}</td><td>{dateTime(g.requestedAt)}</td>
+              <td><button className="primary" onClick={() => act(() => api(`/v1/identity/role-requests/${g.id}/approve`, { method: "POST", body: {} }), "Approved. The role is now in effect.")}>Approve</button> <button onClick={() => act(() => api(`/v1/identity/role-requests/${g.id}/reject`, { method: "POST", body: {} }), "Rejected or withdrawn.")}>Reject</button></td></tr>)}</tbody></Table>
+          <p className="small muted">You cannot approve a role you asked for or one for yourself. If you made the request, Reject withdraws it.</p>
+        </Card></div>
+      ) : null}
       {manage ? <Lockdown /> : null}
       {manage ? (
         <div style={{ marginTop: 16 }}><Card title="Add a person">
-          <form className="row" onSubmit={e => { e.preventDefault(); void act(async () => { await api("/v1/identity/principals", { method: "POST", body: { issuer: form.issuer, subject: form.subject, displayName: form.displayName || null, roles: form.roles } }); setForm({ issuer: form.issuer, subject: "", displayName: "", roles: [] }); }, "Person added."); }}>
+          <form className="row" onSubmit={e => { e.preventDefault(); void act(async () => { const r = await api("/v1/identity/principals", { method: "POST", body: { issuer: form.issuer, subject: form.subject, displayName: form.displayName || null, roles: form.roles } }); setForm({ issuer: form.issuer, subject: "", displayName: "", roles: [] }); return r; }, r => `Person added.${held(r)}`); }}>
             <label>Issuer<input required value={form.issuer} onChange={e => setForm({ ...form, issuer: e.target.value })} placeholder="https://idp.institution.example" /></label>
             <label>Subject<input required value={form.subject} onChange={e => setForm({ ...form, subject: e.target.value })} /></label>
             <label>Display name<input value={form.displayName} onChange={e => setForm({ ...form, displayName: e.target.value })} /></label>

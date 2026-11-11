@@ -53,7 +53,7 @@ Ordered by how much a sovereign owner should care.
 
 **F. Releases are not signed, and the bill of materials stops at npm.** *Solution:* sign images with the client's key, pin them by digest, add the base image and operating-system packages to the bill of materials, scan for secrets in CI, and make the client's own build the one they deploy from. CI has never run; this waits on that.
 
-**G. Administrators can grant roles to themselves.** One administrator can add any role to any person, including themselves, and it is audited but not approved by a second person. Settings changes already need two people. *Solution:* require a second administrator to approve granting `administrator` or `approver`, and alert on any grant. Decide with the client whether the added friction is wanted in a small team.
+**G. Granting authority.** *Built (decided with you):* giving anyone `administrator` or `approver` becomes a request that a different administrator must approve. The person who asks cannot approve, and nobody can approve a role for themselves; the asker may withdraw. Other roles apply at once, as does taking any role away. Set-up and the identity command (`pnpm identity add`) still apply everything, which is the break-glass route for the first administrators and needs access to the server. *Not built:* nobody is alerted that a request is waiting, so administrators must look at the Administration page; and with only one active administrator no one can approve, so keep at least two (set-up already requires it).
 
 **H. Vendor access is undefined.** Nothing in the product lets Tiger Capital AI reach the deployment, which is right, but no written rule says what support access exists, who approves it, for how long, or how it is recorded. *Solution:* a short policy: no standing access; time-limited, client-approved, recorded access through the client's own remote tools; audit export afterwards.
 
@@ -64,6 +64,6 @@ Ordered by how much a sovereign owner should care.
 ## What I would do next
 
 1. **B (encrypt documents)**: needs your decision on search (see B), and must be done before documents are ever enabled.
-2. Done since the first version of this page: D (export) and C (scheduled checkpoints with an alert).
+2. Done since the first version of this page: D (export), C (scheduled checkpoints with an alert) and G (two-person grants of authority). Next small step on G: an alert when a request has waited a day.
 3. **A, E, F, H**: with the client's infrastructure and decisions; the written parts (E, H) can be drafted now for review.
-4. **G**: decide with the client.
+
