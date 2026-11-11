@@ -12,6 +12,7 @@
     "typecheck": "tsc -b && tsc -p apps/web",
     "test": "vitest run",
     "e2e": "playwright test",
+    "scale": "node --env-file=.env --import tsx scripts/paging-scale.ts",
     "check": "pnpm lint:wording && pnpm typecheck && pnpm test",
     "migrate": "node --env-file=.env db/migrate.mjs",
     "ingest": "node --use-env-proxy --env-file=.env --import tsx packages/ingest/src/cli.ts",
