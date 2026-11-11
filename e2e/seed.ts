@@ -3,6 +3,7 @@
 import pg from "pg";
 import { PoliteHttp, type Connector } from "../packages/connectors/src/index.js";
 import type { RawRecord } from "../packages/core/src/index.js";
+import { createCase } from "../packages/cases/src/index.js";
 import { ensureDefaultPolicy } from "../packages/governance/src/store.js";
 import { provisionPrincipal } from "../packages/identity/src/index.js";
 import { runIngestion } from "../packages/ingest/src/pipeline.js";
@@ -53,5 +54,10 @@ await ing(C, [ser(C, "sovereign_capital", `${C}|Main Division=General Index`, "I
 await ing(M, [ser(M, "sovereign_capital", M, "Million SAR", "million SAR", m14.map(t => [t, 3_000_000])), ser(M, "sovereign_capital", M, "Growth Rate", "percent", m14.map(t => [t, 9.5]))]);
 await ing(G, [["Oil Activities", 300], ["Non-Oil Activities", 700], ["Government Activities", 200]].map(([a, v]) => ser(G, "sovereign_capital", `${G}|Main Economic Activities=${a}`, "Nominal GDP", undefined, q.map(t => [t, v as number]))));
 await ing("stale-series", [ser("stale-series", "energy", "stale-series", "Value", "units", [["2024-01-01", 1]], 30)]);
+// Enough cases that the list needs a second page. They sit in a domain no pack uses, so no command centre shows them.
+await withTenant(app, id, async c => {
+  const ana = (await c.query("SELECT id FROM principals WHERE idp_subject = 'ana'")).rows[0].id as string;
+  for (let i = 1; i <= 55; i++) await createCase(c, id, { id: ana, roles: ["analyst"] } as never, { title: `Paging check ${String(i).padStart(2, "0")}`, objective: "Exists so the case list has more than one page.", domain: "paging_check", sensitivity: "internal" });
+});
 await owner.end(); await app.end();
 console.log(`seeded institution ${id}`);

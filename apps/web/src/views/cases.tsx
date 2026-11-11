@@ -1,13 +1,13 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { api, ApiError, type CaseDetail, type CaseListRow, type EvidenceRow, type Me, type Reviewer, type RunSummary } from "../api";
-import { Async, Card, CaseState, DataClass, PageHead, PolicyBadge, RuleList, Status, Table, useAction, useApi } from "../components";
+import { Async, Card, CaseState, DataClass, PageHead, PolicyBadge, RuleList, Status, Table, PagerBar, useAction, useApi, usePaged } from "../components";
 import { dateTime, titleCase } from "../format";
 
 const ACTIONS: Record<string, string> = { monitor: "Monitor (no external action)", advisory: "Advisory (a recommendation to decision-makers)", handoff: "Handoff (a task for a person, in the institution's own systems)" };
 
 export function CaseList({ can }: { can: (p: string) => boolean }): ReactNode {
-  const [state, setState] = useState("");
-  const list = useApi<CaseListRow[]>(`/v1/cases${state ? `?state=${state}` : ""}`);
+  const [state, setState] = useState(""), [q, setQ] = useState(""), [term, setTerm] = useState("");
+  const list = usePaged<CaseListRow>(`/v1/cases?${new URLSearchParams({ limit: "50", ...(state ? { state } : {}), ...(term ? { q: term } : {}) })}`);
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -17,11 +17,13 @@ export function CaseList({ can }: { can: (p: string) => boolean }): ReactNode {
       {open ? <NewCase onDone={id => { location.hash = `#/cases/${id}`; }} /> : null}
       <div className="row" style={{ margin: "0 0 14px" }}>
         <label>State<select value={state} onChange={e => setState(e.target.value)}><option value="">All</option>{["open", "analysis", "in_review", "decided", "closed"].map(s => <option key={s} value={s}>{titleCase(s)}</option>)}</select></label>
+        <form className="row" onSubmit={e => { e.preventDefault(); setTerm(q.trim()); }}><label>Search by title or key<input type="search" value={q} onChange={e => setQ(e.target.value)} placeholder="CASE-0004, Kuwait…" dir="auto" /></label><button style={{ alignSelf: "flex-end" }}>Search</button></form>
       </div>
       <Async state={list} empty={d => d.length === 0}>{rows => (
         <Table label="Cases"><thead><tr><th>Case</th><th>Domain</th><th>State</th><th>Sensitivity</th><th>Updated</th></tr></thead>
           <tbody>{rows.map(r => <tr key={r.id}><td><a href={`#/cases/${r.id}`}><span className="mono">{r.case_key}</span> {r.title}</a></td><td>{r.domain}</td><td><CaseState value={r.state} /></td><td>{r.sensitivity === "restricted" ? <span className="badge b-warn">Restricted</span> : "Internal"}</td><td>{dateTime(r.updated_at)}</td></tr>)}</tbody></Table>
       )}</Async>
+      <PagerBar p={list} />
     </>
   );
 }

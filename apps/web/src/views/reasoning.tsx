@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { ApiError, api, type CaseListRow, type ReasoningCall, type ReasoningConfig, type ReasoningResult } from "../api";
-import { Async, Card, PageHead, Table, useApi } from "../components";
+import { Async, Card, PageHead, PagerBar, Table, useApi, usePaged } from "../components";
 import { dateTime } from "../format";
 import { t, tx } from "../i18n";
 
@@ -44,8 +44,8 @@ function Result({ r, caseId }: { r: ReasoningResult; caseId: string | null }): R
 
 export function Assistant({ can }: { can: (p: string) => boolean }): ReactNode {
   const cfg = useApi<ReasoningConfig>("/v1/reasoning/config");
-  const cases = useApi<CaseListRow[]>(can("case.read") ? "/v1/cases" : null);
-  const log = useApi<ReasoningCall[]>(can("reasoning.read") ? "/v1/reasoning/calls" : null);
+  const cases = useApi<CaseListRow[]>(can("case.read") ? "/v1/cases?limit=100&active=1" : null);
+  const log = usePaged<ReasoningCall>(can("reasoning.read") ? "/v1/reasoning/calls?limit=25" : null);
   const [mode, setMode] = useState<Mode>("summary_briefing"), [pack, setPack] = useState<"energy" | "sovereign">("energy"), [caseId, setCaseId] = useState(""), [question, setQuestion] = useState("");
   const [busy, setBusy] = useState(false), [err, setErr] = useState<string | null>(null), [result, setResult] = useState<{ r: ReasoningResult; caseId: string | null } | null>(null);
   const needsCase = mode.endsWith("_case"), ready = mode === "answer" ? question.trim().length >= 5 : needsCase ? caseId !== "" : true;
@@ -80,6 +80,7 @@ export function Assistant({ can }: { can: (p: string) => boolean }): ReactNode {
             <Table label={t("Model calls")}><thead><tr><th>{t("When")}</th><th>{t("Task")}</th><th>{t("Model")}</th><th>{t("Verdict")}</th><th className="num">{t("Facts")}</th><th>{t("Notes")}</th></tr></thead>
               <tbody>{rows.map(r => <tr key={r.id}><td>{dateTime(r.created_at)}</td><td>{r.task.replace(/_/g, " ")}</td><td>{r.provider} · {r.model}</td><td>{r.verdict}</td><td className="num">{r.fact_count}</td><td className="small">{r.reasons.join("; ")}</td></tr>)}</tbody></Table>
           )}</Async>
+          <PagerBar p={log} />
         </Card></div>
       ) : null}
     </>

@@ -1,5 +1,8 @@
 // Arabic wording, keyed by the English source text. It needs a native reviewer before release: see docs/handover/I18N.md.
 export const ar: Record<string, string> = {
+ "Showing {n} of {total}": "عرض {n} من {total}",
+ "Loading…": "جارٍ التحميل…",
+ "Load more": "عرض المزيد",
  "executive": "تنفيذي",
  "analyst": "محلل",
  "expert": "خبير",

@@ -10,7 +10,7 @@ An honest look at the build as it stands: what is strong, what this review found
 - **Numbers are computed by code and verified.** Deterministic scenario engine with exact replay; the model assistant can only return cited text whose every number is checked against stored facts, rejected whole on any failure; notices by email carry no figures.
 - **Two-person control** on settings, policy and the ingestion schedule; separation of duty for decisions.
 - **Failure is designed for.** Fail-closed malware scanning, back-off and auto-pause for sources, retry and give-up for alerts, a restore drill proved on a real cluster, an error boundary on every screen.
-- **Tested end to end.** 311 unit and integration tests against a real database and 32 browser tests against the real API, including Arabic and right-to-left at phone width.
+- **Tested end to end.** 325 unit and integration tests against a real database and 34 browser tests against the real API, including Arabic and right-to-left at phone width.
 - **Honest documentation.** Every handover document says what was not verified; the verification report lists 19 numbered gaps.
 
 ## Found and fixed in this review
@@ -46,7 +46,7 @@ These need something only a person or a real environment can give. None blocks s
 
 1. **Translate the remaining screens, and compose computed sentences in Arabic.** Today the executive screens are translated but signal titles, caveats and drafts are English. This is the most visible gap for a Gulf audience. Needs the reviewer first.
 2. ~~Monitor base-backup age.~~ **Done:** the backup script now records each run (good or failed) in the database; a missed, failed or never-recorded backup alerts administrators, blocks Readiness and appears in metrics. Still to do: schedule the job in the client's environment and run the restore drill there.
-3. **Pagination and search on large lists.** Lists are capped at 200 rows with no cursor. Fine for the first client's data; needed as evidence grows.
+3. ~~Pagination and search on large lists.~~ **Done:** cases, documents, handoffs, memory, evidence, scenario runs and the model call log are read newest first in pages with a total and a "Load more" control, using a cursor that stays correct while records are added. Cases, documents, memory and evidence can be searched or filtered. Restricted cases are neither listed nor counted for people who may not see them. Still to do: test with data an order of magnitude larger (item 4).
 4. **Soak and large-data tests.** Run the schedulers, alert runner and document queue for days, and load a data set an order of magnitude larger, through the proxy.
 5. **Token revocation.** Tokens are valid until they expire and are held in memory only. Set short lifetimes in the identity provider; consider a server-side deny list for an urgent removal.
 6. **High availability.** One node with fast restore was the chosen design. If the client needs it, the next step is a standby database and a second API node (the scheduler and alert runner already claim work atomically).

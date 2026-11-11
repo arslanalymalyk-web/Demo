@@ -21,7 +21,7 @@ const midpoint = (path: [number, number][]) => { const [la, lo] = path[Math.floo
 
 export function MapView({ can }: { can: (p: string) => boolean }): ReactNode {
   const map = useApi<MapData>("/v1/map");
-  const runs = useApi<RunSummary[]>(can("scenario.read") ? "/v1/scenarios/runs" : null);
+  const runs = useApi<RunSummary[]>(can("scenario.read") ? "/v1/scenarios/runs?limit=20" : null);
   const [layers, setLayers] = useState<Record<Layer, boolean>>({ lanes: true, assets: true, series: true, propagation: false });
   const [mode, setMode] = useState<"map" | "list">("map");
   const [sel, setSel] = useState<string | null>(null);

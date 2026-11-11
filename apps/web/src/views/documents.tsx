@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { ApiError, api, upload, type DocConfig, type DocDetail, type DocHit, type DocRow } from "../api";
-import { Async, Card, DataClass, PageHead, Table, useApi } from "../components";
+import { Async, Card, DataClass, PagerBar, usePaged, PageHead, Table, useApi } from "../components";
 import { dateTime, num } from "../format";
 
 const STATE: Record<string, [string, string]> = { queued: ["b-info", "Queued"], processing: ["b-info", "Reading"], ready: ["b-ok", "Ready"], failed: ["b-bad", "Failed"], quarantined: ["b-bad", "Quarantined"] };
@@ -20,7 +20,8 @@ function usePolling(rows: DocRow[] | null, reload: () => void): void {
 }
 
 export function Documents({ can }: { can: (p: string) => boolean }): ReactNode {
-  const list = useApi<DocRow[]>("/v1/documents");
+  const [ft, setFt] = useState(""), [fterm, setFterm] = useState("");
+  const list = usePaged<DocRow>(`/v1/documents?${new URLSearchParams({ limit: "50", ...(fterm ? { q: fterm } : {}) })}`);
   const cfg = useApi<DocConfig>("/v1/documents/config");
   usePolling(list.data, list.reload);
   const [q, setQ] = useState(""), [term, setTerm] = useState("");
@@ -43,11 +44,13 @@ export function Documents({ can }: { can: (p: string) => boolean }): ReactNode {
       )}</Async></Card> : null}
       <div style={{ marginTop: 16 }}>
         <Card title="All documents">
+          <form className="row" style={{ marginBottom: 10 }} onSubmit={e => { e.preventDefault(); setFterm(ft.trim()); }}><label>Narrow the list by title<input type="search" value={ft} onChange={e => setFt(e.target.value)} dir="auto" /></label><button style={{ alignSelf: "flex-end" }}>Filter</button></form>
           <Async state={list} empty={d => d.length === 0}>{rows => (
             <Table label="Documents"><thead><tr><th>Document</th><th>Class</th><th>Status</th><th className="num">Pages</th><th>Text from</th><th>Added</th></tr></thead>
               <tbody>{rows.map(d => <tr key={d.id}><td><a href={`#/documents/${d.id}`}>{d.title}</a><div className="small muted">{d.filename} · {kb(d.size_bytes)}</div></td><td><DataClass value={d.data_class} /></td><td><DocState v={d.status} />{d.scan_status === "pending" || d.scan_status === "error" ? <div className="small muted">Waiting for a malware scan{d.scan_attempts > 0 ? ` (tried ${d.scan_attempts}×)` : ""}</div> : null}{d.scan_status === "infected" ? <div><span className="badge b-bad">Malware flagged</span></div> : null}{d.error ? <div className="small muted" style={{ maxWidth: "34ch" }}>{d.error}</div> : null}</td>
                 <td className="num">{d.page_count ?? "—"}</td><td>{d.status === "ready" || d.status === "quarantined" ? (d.ocr_used ? <>OCR{d.avg_confidence !== null ? <span className="small muted"> · {num(d.avg_confidence, 0)}% confidence</span> : null}</> : "Text layer") : "—"}</td><td>{dateTime(d.created_at)}</td></tr>)}</tbody></Table>
           )}</Async>
+          <PagerBar p={list} />
         </Card>
       </div>
     </>

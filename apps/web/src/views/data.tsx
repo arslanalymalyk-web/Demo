@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Async, Card, DataClass, LineChart, PageHead, Provenance, Status, Table, useApi } from "../components";
+import { Async, Card, DataClass, LineChart, PageHead, PagerBar, Provenance, Status, Table, useApi, usePaged } from "../components";
 import { date, dateTime, month, num } from "../format";
 import type { EvidenceRow, Lineage, Observation, SeriesRow, SourceRow } from "../api";
 
@@ -30,8 +30,8 @@ export function Evidence({ id }: { id: string | null }): ReactNode {
 function EvidenceList(): ReactNode {
   const [source, setSource] = useState(""), [status, setStatus] = useState("");
   const sources = useApi<SourceRow[]>("/v1/sources");
-  const q = new URLSearchParams({ limit: "100", ...(source ? { source } : {}), ...(status ? { status } : {}) });
-  const ev = useApi<EvidenceRow[]>(`/v1/evidence?${q}`);
+  const q = new URLSearchParams({ limit: "50", ...(source ? { source } : {}), ...(status ? { status } : {}) });
+  const ev = usePaged<EvidenceRow>(`/v1/evidence?${q}`);
   return (
     <>
       <PageHead title="Evidence">Every record is stored unchanged with a hash and a version. Open one to see its six provenance fields and the checks it passed.</PageHead>
@@ -43,7 +43,7 @@ function EvidenceList(): ReactNode {
         <Table label="Evidence records"><thead><tr><th>Record</th><th>Source</th><th>Event</th><th>Retrieved</th><th className="num">Ver.</th><th>Validation</th></tr></thead>
           <tbody>{rows.map(r => <tr key={r.id}><td><a href={`#/evidence/${r.id}`} className={r.title ? "" : "mono"}>{r.title ?? (r.external_key.length > 52 ? `${r.external_key.slice(0, 52)}…` : r.external_key)}</a></td><td>{r.source_key}</td><td>{date(r.event_time)}</td><td>{dateTime(r.retrieved_at)}</td><td className="num">{r.version}</td><td><Status value={r.validation_status} /></td></tr>)}</tbody></Table>
       )}</Async>
-      <p className="small muted" style={{ marginTop: 10 }}>Showing the 100 most recent records.</p>
+      <PagerBar p={ev} />
     </>
   );
 }

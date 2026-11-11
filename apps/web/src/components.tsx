@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { api, ApiError, type Lineage } from "./api";
+import { api, apiPage, ApiError, type Lineage } from "./api";
 import { date, dateTime, num, titleCase } from "./format";
 import { t, tx } from "./i18n";
 
@@ -14,6 +14,37 @@ export function useApi<T>(path: string | null): { data: T | null; error: string 
     return () => { live = false; };
   }, [path, n]);
   return { ...s, reload: useCallback(() => setN(x => x + 1), []) };
+}
+
+/** A list read in pages. "Load more" adds the next page under the rows already shown. A new path (a new filter) starts again from the first page. */
+export function usePaged<T>(path: string | null): { data: T[] | null; error: string | null; loading: boolean; reload: () => void; total: number; hasMore: boolean; loadingMore: boolean; loadMore: () => void } {
+  const [s, set] = useState<{ rows: T[] | null; next: string | null; total: number; error: string | null; loading: boolean; more: boolean }>({ rows: null, next: null, total: 0, error: null, loading: path !== null, more: false });
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    if (path === null) { set({ rows: null, next: null, total: 0, error: null, loading: false, more: false }); return; }
+    let live = true;
+    set(p => ({ ...p, loading: true, error: null }));
+    apiPage<T>(path).then(r => live && set({ rows: r.rows, next: r.next, total: r.total, error: null, loading: false, more: false }), e => live && set({ rows: null, next: null, total: 0, error: e instanceof ApiError ? e.message : t("Something went wrong."), loading: false, more: false }));
+    return () => { live = false; };
+  }, [path, n]);
+  const loadMore = useCallback(() => {
+    if (path === null || !s.next || s.more) return;
+    set(p => ({ ...p, more: true }));
+    const u = new URLSearchParams(path.includes("?") ? path.slice(path.indexOf("?") + 1) : ""); u.set("cursor", s.next);
+    apiPage<T>(`${path.split("?")[0]}?${u}`).then(r => set(p => ({ ...p, rows: [...(p.rows ?? []), ...r.rows], next: r.next, total: r.total, more: false })), e => set(p => ({ ...p, more: false, error: e instanceof ApiError ? e.message : t("Something went wrong.") })));
+  }, [path, s.next, s.more]);
+  return { data: s.rows, error: s.error, loading: s.loading, reload: useCallback(() => setN(x => x + 1), []), total: s.total, hasMore: s.next !== null, loadingMore: s.more, loadMore };
+}
+
+/** How much of a list is on screen, and the way to get the rest. */
+export function PagerBar({ p }: { p: { data: unknown[] | null; total: number; hasMore: boolean; loadingMore: boolean; loadMore: () => void } }): ReactNode {
+  if (!p.data || p.total === 0) return null;
+  return (
+    <div className="row" style={{ marginTop: 10, justifyContent: "space-between" }} role="status" aria-live="polite">
+      <span className="small muted">{t("Showing {n} of {total}", { n: p.data.length, total: p.total })}</span>
+      {p.hasMore ? <button disabled={p.loadingMore} onClick={p.loadMore}>{p.loadingMore ? t("Loading…") : t("Load more")}</button> : null}
+    </div>
+  );
 }
 
 export function Async<T>({ state, children, empty }: { state: { data: T | null; error: string | null; loading: boolean }; children: (d: T) => ReactNode; empty?: (d: T) => boolean }): ReactNode {

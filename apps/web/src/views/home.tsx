@@ -10,7 +10,7 @@ const BRENT = "imf-commodity-prices-monthly|commodity=POILBRE";
 export function Home({ can }: { can: (p: string) => boolean }): ReactNode {
   const sources = useApi<SourceRow[]>(can("sources.read") ? "/v1/sources" : null);
   const series = useApi<SeriesRow[]>(can("series.read") ? "/v1/series" : null);
-  const runs = useApi<RunSummary[]>(can("scenario.read") ? "/v1/scenarios/runs" : null);
+  const runs = useApi<RunSummary[]>(can("scenario.read") ? "/v1/scenarios/runs?limit=6" : null);
   const audit = useApi<{ ok: boolean; events: number }>(can("audit.verify") ? "/v1/audit/verify" : null);
   const brent = useApi<Observation[]>(can("series.read") ? `/v1/series/imf-commodity-prices-monthly/observations?subject=${encodeURIComponent(BRENT)}&from=2025-01-01T00:00:00Z` : null);
 

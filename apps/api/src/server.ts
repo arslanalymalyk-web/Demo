@@ -6,12 +6,13 @@ import swagger from "@fastify/swagger";
 import type pg from "pg";
 import { z } from "zod";
 import { PostgresGraph } from "../../../packages/graph/src/index.js";
-import { EPISODE, PACKS, TEMPLATES, createRun, episodeBacktestIfStored, getRun, listRuns, replayRun } from "../../../packages/scenario/src/index.js";
+import { EPISODE, PACKS, TEMPLATES, createRun, episodeBacktestIfStored, getRun, listRuns, listRunsPage, replayRun } from "../../../packages/scenario/src/index.js";
 import { AuthError, IdentityError, findPrincipal, listPrincipals, permissionsOf, provisionPrincipal, setDisabled, setRoles, type Permission, type Principal, type TokenVerifier } from "../../../packages/identity/src/index.js";
 import { audit } from "../../../packages/ingest/src/store.js";
-import { CaseError, addEvidence, addParticipant, addRecommendation, openCaseFromSignal, addScenario, closeCase, createCase, decide, getCase, listCases, listHandoffs, searchMemory, startAnalysis, submitForReview, updateHandoff } from "../../../packages/cases/src/index.js";
+import { PagingError, keysetPage, likePattern, type Page } from "../../../packages/core/src/index.js";
+import { CaseError, addEvidence, addParticipant, addRecommendation, openCaseFromSignal, addScenario, closeCase, createCase, decide, getCase, listCases, listCasesPage, listHandoffsPage, searchMemoryPage, startAnalysis, submitForReview, updateHandoff } from "../../../packages/cases/src/index.js";
 import { GovernanceError, activatePolicy, createPolicyDraft, listPolicies } from "../../../packages/governance/src/index.js";
-import { IntakeError, tools as docTools, downloadDocument, getDocument, getPage, listDocuments, retryDocument, searchDocuments, submitDocument, type DocumentQueue, type Scanner, type Verdict, scanSummary } from "../../../packages/documents/src/index.js";
+import { IntakeError, tools as docTools, downloadDocument, getDocument, getPage, listDocumentsPage, retryDocument, searchDocuments, submitDocument, type DocumentQueue, type Scanner, type Verdict, scanSummary } from "../../../packages/documents/src/index.js";
 import { RetentionError, exportCase, holdFor, placeHold, releaseHold, retentionReport } from "../../../packages/retention/src/index.js";
 import { SCOPES, SCOPE_INFO, DEFAULT_SIGNAL_RULES, SettingsError, activate as activateSetting, activeOf, createDraft as createSettingDraft, effectiveScenarioDefaults, effectiveSchedule, effectiveThresholds, listVersions as listSettings, type Scope } from "../../../packages/settings/src/index.js";
 import { SECTORS, buildMap, buildSector, composeBriefing, isPack, type BriefingCase, type BriefingRun } from "../../../packages/sectors/src/index.js";
@@ -23,7 +24,8 @@ import { SchedulerError, pauseSource, requestRun, resumeSource, sourceHealth, ty
 import { getLineage, verifyAuditChain } from "../../../packages/ingest/src/lineage.js";
 import { withTenant } from "../../../packages/ingest/src/store.js";
 
-const listQuery = z.object({ source: z.string().optional(), status: z.enum(["accepted", "warned", "quarantined", "rejected"]).optional(), limit: z.coerce.number().int().min(1).max(200).default(50), offset: z.coerce.number().int().min(0).default(0) });
+const pageQ = { limit: z.coerce.number().int().min(1).max(200).default(50), cursor: z.string().max(400).optional() };
+const listQuery = z.object({ source: z.string().optional(), status: z.enum(["accepted", "warned", "quarantined", "rejected"]).optional(), q: z.string().max(100).optional(), ...pageQ });
 const uuid = z.string().uuid();
 const runBody = z.object({ template: z.string(), baselineMonth: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional(), overrides: z.record(z.string(), z.number().finite()).default({}) });
 const pathQuery = z.object({ depth: z.coerce.number().int().min(1).max(6).default(3) });
@@ -183,6 +185,11 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   }
   void app.register(swagger, { openapi: { info: { title: "TIGERIS AI OS API", version: "0.1.0", description: "Evidence, lineage and audit. Institution scope comes from deployment configuration." } } });
   const tenant = <T>(fn: (c: pg.PoolClient) => Promise<T>) => withTenant(opts.pool, opts.institutionId, fn);
+  // A paged list is an array, with the total and the marker for the next page in headers. A bad marker is a plain 400.
+  const paged = async <T>(reply: { header: (k: string, v: string) => unknown; code: (n: number) => { send: (b: unknown) => unknown } }, fn: () => Promise<Page<T>>) => {
+    try { const p = await fn(); reply.header("x-total-count", String(p.total)); if (p.next) reply.header("x-next-cursor", p.next); return p.rows; }
+    catch (e) { if (e instanceof PagingError) return reply.code(400).send({ error: "invalid_query", message: e.message }); throw e; }
+  };
 
   // Startup invariant: every route must have an access rule, so a new endpoint cannot ship open by accident.
   const declared: string[] = [];
@@ -259,11 +266,10 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   app.get("/v1/evidence", async (req, reply) => {
     const q = listQuery.safeParse(req.query);
     if (!q.success) return reply.code(400).send({ error: "invalid_query", details: q.error.flatten() });
-    return tenant(async c => (await c.query(
-      `SELECT e.id, s.source_key, e.external_key, e.payload->>'title' AS title, e.original_agency, e.event_time, e.retrieved_at, e.version, e.data_class, e.validation_status
-       FROM evidence_objects e JOIN sources s ON s.id = e.source_id
-       WHERE ($1::text IS NULL OR s.source_key = $1) AND ($2::text IS NULL OR e.validation_status::text = $2)
-       ORDER BY e.retrieved_at DESC, e.external_key LIMIT $3 OFFSET $4`, [q.data.source ?? null, q.data.status ?? null, q.data.limit, q.data.offset])).rows);
+    return paged(reply, () => tenant(c => keysetPage(c, {
+      select: "e.id, s.source_key, e.external_key, e.payload->>'title' AS title, e.original_agency, e.event_time, e.retrieved_at, e.version, e.data_class, e.validation_status", from: "evidence_objects e JOIN sources s ON s.id = e.source_id",
+      where: "($1::text IS NULL OR s.source_key = $1) AND ($2::text IS NULL OR e.validation_status::text = $2) AND ($3::text IS NULL OR e.external_key ILIKE $3 OR e.payload->>'title' ILIKE $3)",
+      params: [q.data.source ?? null, q.data.status ?? null, q.data.q?.trim() ? likePattern(q.data.q) : null], ts: "e.retrieved_at", id: "e.id", limit: q.data.limit, cursor: q.data.cursor })));
   });
 
   app.get("/v1/evidence/:id/lineage", async (req, reply) => {
@@ -334,7 +340,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
     }
   });
 
-  app.get("/v1/scenarios/runs", async () => tenant(c => listRuns(c)));
+  app.get("/v1/scenarios/runs", async (req, reply) => { const q = z.object({ template: z.string().max(80).optional(), ...pageQ }).safeParse(req.query); return q.success ? paged(reply, () => tenant(c => listRunsPage(c, q.data))) : reply.code(400).send({ error: "invalid_query" }); });
 
   app.get("/v1/scenarios/runs/:id", async (req, reply) => {
     const id = uuid.safeParse((req.params as { id: string }).id);
@@ -366,7 +372,11 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   const idOf = (req: { params: unknown }) => uuid.safeParse((req.params as { id: string }).id);
 
   app.get("/v1/identity/reviewers", async () => tenant(async c => (await listPrincipals(c)).filter(p => !p.disabled && permissionsOf(p.roles).has("decision.make")).map(p => ({ id: p.id, name: p.displayName ?? p.subject, roles: p.roles }))));
-  app.get("/v1/cases", async (req, reply) => { const st = z.enum(["open", "analysis", "in_review", "decided", "closed"]).optional().safeParse((req.query as { state?: string }).state); return st.success ? tenant(c => listCases(c, actor(req), st.data)) : reply.code(400).send({ error: "invalid_query" }); });
+  app.get("/v1/cases", async (req, reply) => {
+    const q = z.object({ state: z.enum(["open", "analysis", "in_review", "decided", "closed"]).optional(), domain: z.string().max(200).optional(), active: z.enum(["1", "true"]).optional(), q: z.string().max(100).optional(), ...pageQ }).safeParse(req.query);
+    if (!q.success) return reply.code(400).send({ error: "invalid_query" });
+    return paged(reply, () => tenant(c => listCasesPage(c, actor(req), { ...(q.data.state ? { state: q.data.state } : {}), ...(q.data.domain ? { domain: q.data.domain.split(",").map(x => x.trim()).filter(Boolean).slice(0, 10) } : {}), ...(q.data.active ? { active: true } : {}), ...(q.data.q ? { q: q.data.q } : {}), limit: q.data.limit, ...(q.data.cursor ? { cursor: q.data.cursor } : {}) })));
+  });
   app.post("/v1/cases", async (req, reply) => { const b = caseBody.safeParse(req.body); return b.success ? domain(req, reply, c => createCase(c, opts.institutionId, actor(req), b.data), 201) : bad(reply, b.error); });
   app.get("/v1/cases/:id", async (req, reply) => { const id = idOf(req); return id.success ? domain(req, reply, async c => ({ ...(await getCase(c, actor(req), id.data) as object), hold: await holdFor(c, id.data) })) : reply.code(400).send({ error: "invalid_id" }); });
   const caseAction = <B,>(path: string, schema: z.ZodType<B, unknown>, run: (c: pg.PoolClient, caseId: string, b: B, a: { id: string; roles: string[] }) => Promise<unknown>, okCode = 200) =>
@@ -379,9 +389,9 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   caseAction("submit", submitBody, (c, id, b, a) => submitForReview(c, opts.institutionId, a, id, b));
   caseAction("decision", decisionBody, (c, id, b, a) => decide(c, opts.institutionId, a, id, b as never));
   caseAction("close", closeBody, (c, id, b, a) => closeCase(c, opts.institutionId, a, id, b));
-  app.get("/v1/handoffs", async req => tenant(c => listHandoffs(c, actor(req))));
+  app.get("/v1/handoffs", async (req, reply) => { const q = z.object({ status: z.enum(["open", "done", "cancelled"]).optional(), ...pageQ }).safeParse(req.query); return q.success ? paged(reply, () => tenant(c => listHandoffsPage(c, actor(req), { ...(q.data.status ? { status: q.data.status } : {}), limit: q.data.limit, ...(q.data.cursor ? { cursor: q.data.cursor } : {}) }))) : reply.code(400).send({ error: "invalid_query" }); });
   app.post("/v1/handoffs/:id/update", async (req, reply) => { const id = idOf(req), b = handoffBody.safeParse(req.body); if (!id.success) return reply.code(400).send({ error: "invalid_id" }); if (!b.success) return bad(reply, b.error); return domain(req, reply, async c => { await updateHandoff(c, opts.institutionId, actor(req), id.data, b.data); return { ok: true }; }); });
-  app.get("/v1/memory", async (req, reply) => { const q = z.object({ q: z.string().max(200).optional() }).safeParse(req.query); return q.success ? tenant(c => searchMemory(c, actor(req), q.data.q)) : reply.code(400).send({ error: "invalid_query" }); });
+  app.get("/v1/memory", async (req, reply) => { const q = z.object({ q: z.string().max(200).optional(), ...pageQ }).safeParse(req.query); return q.success ? paged(reply, () => tenant(c => searchMemoryPage(c, actor(req), { ...(q.data.q ? { q: q.data.q } : {}), limit: q.data.limit, ...(q.data.cursor ? { cursor: q.data.cursor } : {}) }))) : reply.code(400).send({ error: "invalid_query" }); });
   app.get("/v1/policies", async () => tenant(c => listPolicies(c)));
   app.post("/v1/policies", async (req, reply) => { const b = policyBody.safeParse(req.body); return b.success ? domain(req, reply, c => createPolicyDraft(c, opts.institutionId, { type: "principal", id: req.principal!.id }, { rules: b.data.rules, authority: b.data.authority }), 201) : bad(reply, b.error); });
   app.post("/v1/policies/:id/activate", async (req, reply) => { const id = idOf(req); return id.success ? domain(req, reply, c => activatePolicy(c, opts.institutionId, { type: "principal", id: req.principal!.id }, id.data)) : reply.code(400).send({ error: "invalid_id" }); });
@@ -553,7 +563,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
       throw e;
     }
   });
-  app.get("/v1/reasoning/calls", async () => tenant(c => listCalls(c, 50)));
+  app.get("/v1/reasoning/calls", async (req, reply) => { const q = z.object(pageQ).safeParse(req.query); return q.success ? paged(reply, () => tenant(c => listCalls(c, { limit: q.data.limit, ...(q.data.cursor ? { cursor: q.data.cursor } : {}) }))) : reply.code(400).send({ error: "invalid_query" }); });
 
   app.post("/v1/sectors/:pack/signals/:id/case", async (req, reply) => {
     const { pack, id } = req.params as { pack: string; id: string };
@@ -566,7 +576,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
     }, r => r.existing ? 200 : 201);
   });
 
-  app.get("/v1/documents", async () => tenant(c => listDocuments(c)));
+  app.get("/v1/documents", async (req, reply) => { const q = z.object({ q: z.string().max(100).optional(), status: z.enum(["queued", "processing", "ready", "failed", "quarantined"]).optional(), ...pageQ }).safeParse(req.query); return q.success ? paged(reply, () => tenant(c => listDocumentsPage(c, { ...(q.data.q ? { q: q.data.q } : {}), ...(q.data.status ? { status: q.data.status } : {}), limit: q.data.limit, ...(q.data.cursor ? { cursor: q.data.cursor } : {}) }))) : reply.code(400).send({ error: "invalid_query" }); });
   app.get("/v1/documents/config", async () => { const t = await docTools(); return { clientDataEnabled: opts.clientDataEnabled === true, ocr: { available: t.tesseract !== null, languages: t.languages }, scanner: await scannerState(), scan: await tenant(c => scanSummary(c)), maxMegabytes: 20, maxPages: 100, accepted: ["PDF", "PNG", "JPEG", "TIFF", "Word (.docx)", "Plain text"] }; });
   app.get("/v1/documents/search", async (req, reply) => { const q = z.object({ q: z.string().min(2).max(200) }).safeParse(req.query); return q.success ? tenant(c => searchDocuments(c, q.data.q)) : reply.code(400).send({ error: "invalid_query" }); });
   app.get("/v1/documents/:id", async (req, reply) => { const id = idOf(req); if (!id.success) return reply.code(400).send({ error: "invalid_id" }); return (await tenant(c => getDocument(c, id.data))) ?? reply.code(404).send({ error: "not_found" }); });

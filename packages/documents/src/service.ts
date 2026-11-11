@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type pg from "pg";
 import { PoliteHttp, type Connector } from "../../connectors/src/index.js";
+import { keysetPage, likePattern, type Page } from "../../core/src/index.js";
 import type { RawRecord } from "../../core/src/index.js";
 import { runIngestion } from "../../ingest/src/pipeline.js";
 import { audit, withTenant } from "../../ingest/src/store.js";
@@ -152,7 +153,9 @@ export async function retryDocument(c: pg.PoolClient, inst: string, actorId: str
 }
 
 const COLS = "scan_status, scan_engine, scan_signature, scanned_at, scan_attempts, scan_next_at, scan_error, id, title, filename, mime, size_bytes, sha256, data_class, original_agency, source_url, rights_statement, languages, status, error, page_count, language, ocr_used, avg_confidence, evidence_id, uploaded_by, created_at, processed_at";
-export async function listDocuments(c: pg.PoolClient): Promise<unknown[]> { return (await c.query(`SELECT ${COLS} FROM documents ORDER BY created_at DESC LIMIT 200`)).rows; }
+export async function listDocumentsPage(c: pg.PoolClient, f: { q?: string; status?: string; limit?: number; cursor?: string } = {}): Promise<Page<Record<string, unknown>>> {
+  return keysetPage(c, { select: COLS, from: "documents d", where: "($1::text IS NULL OR d.title ILIKE $1 OR d.filename ILIKE $1) AND ($2::text IS NULL OR d.status = $2)", params: [f.q?.trim() ? likePattern(f.q) : null, f.status ?? null], ts: "d.created_at", id: "d.id", limit: f.limit ?? 50, cursor: f.cursor });
+}
 export async function getDocument(c: pg.PoolClient, id: string): Promise<unknown | null> {
   const d = (await c.query(`SELECT ${COLS} FROM documents WHERE id = $1`, [id])).rows[0];
   if (!d) return null;

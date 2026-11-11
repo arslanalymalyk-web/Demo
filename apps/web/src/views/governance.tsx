@@ -1,10 +1,10 @@
 import { useState, type ReactNode } from "react";
 import { api, type HandoffRow, type MemoryRow, type PolicyRow } from "../api";
-import { Async, Card, PageHead, Table, useAction, useApi } from "../components";
+import { Async, Card, PageHead, PagerBar, Table, useAction, useApi, usePaged } from "../components";
 import { dateTime, titleCase } from "../format";
 
 export function Handoffs({ can }: { can: (p: string) => boolean }): ReactNode {
-  const list = useApi<HandoffRow[]>("/v1/handoffs");
+  const list = usePaged<HandoffRow>("/v1/handoffs?limit=50");
   const a = useAction(() => list.reload());
   const [out, setOut] = useState<Record<string, string>>({});
   return (
@@ -15,6 +15,7 @@ export function Handoffs({ can }: { can: (p: string) => boolean }): ReactNode {
           <tbody>{rows.map(h => <tr key={h.id}><td><a href={`#/cases/${h.caseId}`}><span className="mono">{h.caseKey}</span></a><div className="small muted">{h.caseTitle}</div></td><td>{h.task}</td><td><span className={`badge ${h.status === "done" ? "b-ok" : h.status === "open" ? "b-warn" : "b-plain"}`}>{titleCase(h.status)}</span></td>
             <td>{h.outcome ?? (can("handoff.update") ? <form className="row" onSubmit={e => { e.preventDefault(); void a.run(() => api(`/v1/handoffs/${h.id}/update`, { method: "POST", body: { status: "done", outcome: out[h.id] ?? "" } })); }}><input type="text" required minLength={5} aria-label="Outcome" value={out[h.id] ?? ""} onChange={e => setOut({ ...out, [h.id]: e.target.value })} placeholder="What happened" /><button disabled={a.busy}>Mark done</button></form> : "Awaiting operations")}</td></tr>)}</tbody></Table>
       )}</Async>
+      <PagerBar p={list} />
       {a.error ? <div className="note err" role="alert" style={{ marginTop: 12 }}>{a.error}</div> : null}
     </>
   );
@@ -22,7 +23,7 @@ export function Handoffs({ can }: { can: (p: string) => boolean }): ReactNode {
 
 export function Memory(): ReactNode {
   const [q, setQ] = useState(""), [term, setTerm] = useState("");
-  const list = useApi<MemoryRow[]>(`/v1/memory${term ? `?q=${encodeURIComponent(term)}` : ""}`);
+  const list = usePaged<MemoryRow>(`/v1/memory?${new URLSearchParams({ limit: "30", ...(term ? { q: term } : {}) })}`);
   return (
     <>
       <PageHead title="Institutional Memory">Closed cases with a recorded decision and outcome. Only decided, closed work enters memory. Nothing leaves this institution and nothing trains a model.</PageHead>
@@ -33,6 +34,7 @@ export function Memory(): ReactNode {
           {m.outcome ? <p><strong>Outcome.</strong> {m.outcome}</p> : <p className="small muted">No outcome recorded.</p>}
           <p className="small muted">Closed {dateTime(m.created_at)} · <a href={`#/cases/${m.case_id}`}>Open the case</a></p>
         </Card>))}</div>}</Async>
+      <PagerBar p={list} />
     </>
   );
 }

@@ -61,8 +61,8 @@ function SignalRow({ s, pack, can, caseFor, reload }: { s: Signal; pack: string;
 
 export function SectorCentre({ pack, me, can }: { pack: "energy" | "sovereign"; me: Me; can: (p: string) => boolean }): ReactNode {
   const view = useApi<SectorView>(`/v1/sectors/${pack}`);
-  const cases = useApi<CaseListRow[]>(can("case.read") ? "/v1/cases" : null);
-  const runs = useApi<RunSummary[]>(can("scenario.read") ? "/v1/scenarios/runs" : null);
+  const cases = useApi<CaseListRow[]>(can("case.read") ? "/v1/cases?limit=100&active=1" : null);
+  const runs = useApi<RunSummary[]>(can("scenario.read") ? "/v1/scenarios/runs?limit=50" : null);
   const tpl = useApi<TemplateInfo[]>(can("scenario.read") ? "/v1/scenarios/templates" : null);
   const mine = (cases.data ?? []).filter(c => DOMAINS[pack].includes(c.domain));
   const bySignal = new Map((cases.data ?? []).filter(c => c.signal_id && c.state !== "closed").map(c => [c.signal_id!, c]));

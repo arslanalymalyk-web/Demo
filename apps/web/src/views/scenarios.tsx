@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { api, ApiError, type Backtest, type Param, type ReplayResult, type ResultRow, type RunDetail, type RunSummary, type TemplateInfo } from "../api";
-import { Async, Card, LinkClass, PageHead, SimulationBadge, Stat, Status, Table, Tornado, useApi } from "../components";
+import { Async, Card, LinkClass, PageHead, SimulationBadge, Stat, PagerBar, Status, Table, Tornado, useApi, usePaged } from "../components";
 import { dateTime, month, musd, num, pct, short } from "../format";
 
 const HORIZONS = ["72h", "90d", "1y", "5y"] as const;
@@ -24,7 +24,7 @@ const metricLabel = (m: string): string => LABEL[m] ?? (m.startsWith("revenue_de
 
 export function Scenarios({ can }: { can: (p: string) => boolean }): ReactNode {
   const tpl = useApi<TemplateInfo[]>("/v1/scenarios/templates");
-  const runs = useApi<RunSummary[]>("/v1/scenarios/runs");
+  const runs = usePaged<RunSummary>("/v1/scenarios/runs?limit=25");
   const bt = useApi<Backtest | { available: false; reason: string }>("/v1/scenarios/backtest");
   return (
     <>
@@ -36,6 +36,7 @@ export function Scenarios({ can }: { can: (p: string) => boolean }): ReactNode {
             <Table label="Scenario runs"><thead><tr><th>Run</th><th>Template</th><th>Confidence</th><th>Created</th></tr></thead>
               <tbody>{r.map(x => <tr key={x.id}><td><a href={`#/scenarios/runs/${x.id}`} className="mono">{x.id.slice(0, 8)}</a></td><td>{x.template_key}</td><td><Status value={x.confidence} /></td><td>{dateTime(x.created_at)}</td></tr>)}</tbody></Table>
           )}</Async>
+          <PagerBar p={runs} />
         </Card>
         <Card title="Back-test of the Mar–May 2026 episode" aside={<span className="badge b-warn">In-sample</span>}>
           <Async state={bt}>{b => "available" in b ? <div className="note" role="status">{b.reason}</div> : <>

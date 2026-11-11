@@ -1,5 +1,5 @@
 import type pg from "pg";
-import { sha256Hex } from "../../core/src/index.js";
+import { keysetPage, sha256Hex, type Page } from "../../core/src/index.js";
 import { audit, withTenant } from "../../ingest/src/store.js";
 import { factsForEvidence, searchFacts } from "../../ingest/src/observations.js";
 import type { Briefing, PackKey } from "../../sectors/src/index.js";
@@ -73,6 +73,6 @@ export async function runReasoning(ctx: Context, actor: Actor, req: Request): Pr
   return { id, task: req.task, verdict, reasons, output, facts: pack.facts, withheld: pack.withheld, provider: ctx.adapter.provider, model: ctx.adapter.model, promptHash, factsHash: pack.hash, at: new Date().toISOString() };
 }
 
-export async function listCalls(c: pg.PoolClient, limit = 50): Promise<unknown[]> {
-  return (await c.query("SELECT id, principal_id, task, subject, provider, model, prompt_hash, facts_hash, fact_count, data_classes, verdict, reasons, left(raw_output, 2000) AS raw_output, output, input_tokens, output_tokens, duration_ms, created_at FROM reasoning_calls ORDER BY created_at DESC LIMIT $1", [Math.min(Math.max(limit, 1), 200)])).rows;
+export async function listCalls(c: pg.PoolClient, f: { limit?: number; cursor?: string } = {}): Promise<Page<Record<string, unknown>>> {
+  return keysetPage(c, { select: "id, principal_id, task, subject, provider, model, prompt_hash, facts_hash, fact_count, data_classes, verdict, reasons, left(raw_output, 2000) AS raw_output, output, input_tokens, output_tokens, duration_ms, created_at", from: "reasoning_calls", ts: "created_at", id: "id", limit: f.limit ?? 50, cursor: f.cursor });
 }

@@ -1,4 +1,5 @@
 import type pg from "pg";
+import { keysetPage, type Page } from "../../core/src/index.js";
 import { PostgresGraph } from "../../graph/src/index.js";
 import { readObservations, type ObservedFact } from "../../ingest/src/observations.js";
 import { audit } from "../../ingest/src/store.js";
@@ -146,9 +147,12 @@ export async function replayRun(c: pg.PoolClient, runId: string): Promise<Replay
   return { runId, manifestMatches, resultsMatch: replayed === r.results_hash, storedResultsHash: r.results_hash, replayedResultsHash: replayed, storedRowsMatch };
 }
 
-export async function listRuns(c: pg.PoolClient): Promise<unknown[]> {
-  return (await c.query("SELECT id, template_key, template_version, formula_version, manifest_hash, results_hash, confidence->>'level' AS confidence, created_by, created_at FROM scenario_runs ORDER BY created_at DESC LIMIT 100")).rows;
+const RUN_COLS = "r.id, r.template_key, r.template_version, r.formula_version, r.manifest_hash, r.results_hash, r.confidence->>'level' AS confidence, r.created_by, r.created_at";
+export async function listRunsPage(c: pg.PoolClient, f: { template?: string; limit?: number; cursor?: string } = {}): Promise<Page<Record<string, unknown>>> {
+  return keysetPage(c, { select: RUN_COLS, from: "scenario_runs r", where: "$1::text IS NULL OR r.template_key = $1", params: [f.template ?? null], ts: "r.created_at", id: "r.id", limit: f.limit ?? 50, cursor: f.cursor });
 }
+/** The newest 100 runs, for code that needs them all at once (in-process use only; screens page through listRunsPage). */
+export async function listRuns(c: pg.PoolClient): Promise<unknown[]> { return (await listRunsPage(c, { limit: 100 })).rows; }
 export async function getRun(c: pg.PoolClient, runId: string): Promise<unknown | null> {
   const r = (await c.query("SELECT * FROM scenario_runs WHERE id = $1", [runId])).rows[0];
   if (!r) return null;

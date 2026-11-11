@@ -1,6 +1,7 @@
 import type pg from "pg";
 import { activePolicy, assertAuthority, createHandoff, evaluateAndRecord, GovernanceError, handoffById, handoffsFor, handoffsForCases, humanDecisionsFor, policyDecisionsFor, recordHumanDecision, setHandoff,
   type ActionClass, type Manifest, type PolicyDecisionRow } from "../../governance/src/index.js";
+import { keysetPage, likePattern, type Page } from "../../core/src/index.js";
 import { PostgresGraph } from "../../graph/src/index.js";
 import { getPrincipal, listPrincipals, permissionsOf } from "../../identity/src/index.js";
 import { evidenceBriefs } from "../../ingest/src/observations.js";
@@ -54,13 +55,22 @@ export async function createCase(c: pg.PoolClient, inst: string, actor: Actor, i
   return { id: k.id, caseKey: key };
 }
 
+export interface CaseFilter { state?: string; domain?: string[]; active?: boolean; q?: string; limit?: number; cursor?: string }
+const VISIBLE = (me: string, aud: string) => "(k.sensitivity = 'internal' OR " + aud + " OR EXISTS (SELECT 1 FROM case_participants p WHERE p.case_id = k.id AND p.principal_id = " + me + "))";
+
+/** One page of the cases this person may see, newest change first, with the total that match. A restricted case the person has no part in is not counted or found. */
+export async function listCasesPage(c: pg.PoolClient, actor: Actor, f: CaseFilter = {}): Promise<Page<Record<string, unknown>>> {
+  return keysetPage(c, {
+    select: "k.id, k.case_key, k.title, k.domain, k.sensitivity, k.state, k.owner_id, k.reviewer_id, k.version, k.updated_at, k.created_at, k.signal->>'id' AS signal_id",
+    from: "cases k",
+    where: "($1::case_state IS NULL OR k.state = $1::case_state) AND ($4::boolean IS NOT TRUE OR k.state <> 'closed') AND ($5::text[] IS NULL OR k.domain = ANY($5::text[])) AND ($6::text IS NULL OR k.title ILIKE $6 OR k.case_key ILIKE $6) AND " + VISIBLE("$2", "$3"),
+    params: [f.state ?? null, actor.id, isAuditor(actor), f.active ?? null, f.domain?.length ? f.domain : null, f.q?.trim() ? likePattern(f.q) : null],
+    ts: "k.updated_at", id: "k.id", limit: f.limit ?? 50, cursor: f.cursor,
+  });
+}
+/** Every case this person may see, up to 200, for code that needs the lot (in-process use only; the screens page through listCasesPage). */
 export async function listCases(c: pg.PoolClient, actor: Actor, state?: string): Promise<unknown[]> {
-  const r = await c.query(
-    `SELECT k.id, k.case_key, k.title, k.domain, k.sensitivity, k.state, k.owner_id, k.reviewer_id, k.version, k.updated_at, k.created_at, k.signal->>'id' AS signal_id
-     FROM cases k WHERE ($1::case_state IS NULL OR k.state = $1::case_state)
-       AND (k.sensitivity = 'internal' OR $3 OR EXISTS (SELECT 1 FROM case_participants p WHERE p.case_id = k.id AND p.principal_id = $2))
-     ORDER BY k.updated_at DESC LIMIT 200`, [state ?? null, actor.id, isAuditor(actor)]);
-  return r.rows;
+  return (await listCasesPage(c, actor, { ...(state ? { state } : {}), limit: 200 })).rows;
 }
 
 export async function addParticipant(c: pg.PoolClient, inst: string, actor: Actor, caseId: string, principalId: string): Promise<void> {
@@ -230,20 +240,21 @@ export async function getCase(c: pg.PoolClient, actor: Actor, caseId: string): P
   };
 }
 
-export async function listHandoffs(c: pg.PoolClient, actor: Actor): Promise<unknown[]> {
-  const visible = (await listCases(c, actor)) as { id: string; case_key: string; title: string }[];
-  const byId = new Map(visible.map(k => [k.id, k]));
-  return (await handoffsForCases(c, [...byId.keys()])).map(h => ({ ...h, caseKey: byId.get(h.caseId)!.case_key, caseTitle: byId.get(h.caseId)!.title }));
+export async function listHandoffsPage(c: pg.PoolClient, actor: Actor, f: { status?: string; limit?: number; cursor?: string } = {}): Promise<Page<Record<string, unknown>>> {
+  const page = await keysetPage<Record<string, unknown>>(c, {
+    select: "h.*, k.case_key, k.title AS case_title", from: "action_handoffs h JOIN cases k ON k.id = h.case_id",
+    where: "($1::text IS NULL OR h.status::text = $1) AND " + VISIBLE("$2", "$3"), params: [f.status ?? null, actor.id, isAuditor(actor)],
+    ts: "h.created_at", id: "h.id", limit: f.limit ?? 50, cursor: f.cursor,
+  });
+  return { ...page, rows: page.rows.map(r => ({ id: r.id, caseId: r.case_id, decisionId: r.decision_id, task: r.task, ownerId: r.owner_id ?? null, status: r.status, outcome: r.outcome ?? null, updatedAt: new Date(r.updated_at as string).toISOString(), caseKey: r.case_key, caseTitle: r.case_title })) };
 }
 
-export async function searchMemory(c: pg.PoolClient, actor: Actor, q?: string): Promise<unknown[]> {
-  const r = await c.query(
-    `SELECT m.id, m.case_id, k.case_key, m.title, m.summary, m.domain, m.sensitivity, m.decision, m.outcome, m.created_at
-     FROM memory_records m JOIN cases k ON k.id = m.case_id
-     WHERE ($1::text IS NULL OR to_tsvector('simple', m.title || ' ' || m.summary || ' ' || COALESCE(m.outcome, '')) @@ plainto_tsquery('simple', $1))
-       AND (m.sensitivity = 'internal' OR $3 OR EXISTS (SELECT 1 FROM case_participants p WHERE p.case_id = m.case_id AND p.principal_id = $2))
-     ORDER BY m.created_at DESC LIMIT 50`, [q?.trim() || null, actor.id, isAuditor(actor)]);
-  return r.rows;
+export async function searchMemoryPage(c: pg.PoolClient, actor: Actor, f: { q?: string; limit?: number; cursor?: string } = {}): Promise<Page<Record<string, unknown>>> {
+  return keysetPage(c, {
+    select: "m.id, m.case_id, k.case_key, m.title, m.summary, m.domain, m.sensitivity, m.decision, m.outcome, m.created_at", from: "memory_records m JOIN cases k ON k.id = m.case_id",
+    where: "($1::text IS NULL OR to_tsvector('simple', m.title || ' ' || m.summary || ' ' || COALESCE(m.outcome, '')) @@ plainto_tsquery('simple', $1)) AND (m.sensitivity = 'internal' OR $3 OR EXISTS (SELECT 1 FROM case_participants p WHERE p.case_id = m.case_id AND p.principal_id = $2))",
+    params: [f.q?.trim() || null, actor.id, isAuditor(actor)], ts: "m.created_at", id: "m.id", limit: f.limit ?? 50, cursor: f.cursor,
+  });
 }
 
 export interface SignalInput { signalId: string; ruleId: string; rulesVersion: string; settingsVersion?: number | null; title: string; objective: string; domain: string; observedAt: string; evidenceIds: string[]; values: Record<string, unknown> }

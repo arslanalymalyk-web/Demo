@@ -16,7 +16,7 @@ TIGERIS AI OS is an intelligence system owned by the institution that runs it. E
 
 ## What is proved
 
-316 automated tests pass against a real database, and 32 browser tests walk every screen against the real API. A disaster-recovery drill, a proxy and browser test, an offline install and a dependency audit (zero known vulnerabilities) were run for real. See [VERIFICATION-REPORT.md](VERIFICATION-REPORT.md).
+325 automated tests pass against a real database, and 34 browser tests walk every screen against the real API. A disaster-recovery drill, a proxy and browser test, an offline install and a dependency audit (zero known vulnerabilities) were run for real. See [VERIFICATION-REPORT.md](VERIFICATION-REPORT.md).
 
 ## What is not proved
 

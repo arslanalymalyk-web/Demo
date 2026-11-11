@@ -14,6 +14,15 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
   if (!r.ok) throw new ApiError(r.status, explain(r.status, body), body);
   return body as T;
 }
+export interface PageOf<T> { rows: T[]; next: string | null; total: number }
+/** A paged list: the rows, the total that match, and the marker for the next page. */
+export async function apiPage<T>(path: string): Promise<PageOf<T>> {
+  const r = await fetch(`/api${path}`, { headers: token ? { authorization: `Bearer ${token}` } : {} });
+  const text = await r.text(), body = text ? safeJson(text) : null;
+  if (r.status === 401) onUnauthorized();
+  if (!r.ok) throw new ApiError(r.status, explain(r.status, body), body);
+  return { rows: Array.isArray(body) ? (body as T[]) : [], next: r.headers.get("x-next-cursor"), total: Number(r.headers.get("x-total-count") ?? (Array.isArray(body) ? body.length : 0)) };
+}
 const safeJson = (s: string): unknown => { try { return JSON.parse(s); } catch { return s; } };
 function explain(status: number, body: unknown): string {
   const m = (body as { message?: string; error?: string } | null);
