@@ -146,6 +146,8 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   new Gauge({ name: "tigeris_sources", help: "Sources by health", labelNames: ["health"], registers: [registry], async collect() { this.reset(); const rows = await healthNow().catch(() => []); for (const h of ["healthy", "stale", "failing", "paused", "no_data", "not_approved"]) this.set({ health: h }, rows.filter(r => r.health === h).length); } });
   new Gauge({ name: "tigeris_source_last_success_age_hours", help: "Hours since the last completed fetch of a scheduled source", labelNames: ["source"], registers: [registry], async collect() { this.reset(); for (const r of (await healthNow().catch(() => [])).filter(x => x.scheduled && x.lastSuccessAgeHours !== null)) this.set({ source: r.sourceKey }, r.lastSuccessAgeHours!); } });
   new Gauge({ name: "tigeris_ingest_jobs_24h", help: "Ingestion jobs started in the last 24 hours, by outcome", labelNames: ["status"], registers: [registry], async collect() { this.reset(); const rows = await withTenant(opts.pool, opts.institutionId, async c => (await c.query("SELECT status, count(*)::int AS n FROM ingestion_jobs WHERE started_at > now() - interval '24 hours' GROUP BY status")).rows).catch(() => []); for (const s of ["completed", "failed", "running"]) this.set({ status: s }, rows.find((r: { status: string; n: number }) => r.status === s)?.n ?? 0); } });
+  new Gauge({ name: "tigeris_alert_conditions_open", help: "Alert conditions that are open, by category", labelNames: ["category"], registers: [registry], async collect() { this.reset(); const rows = await withTenant(opts.pool, opts.institutionId, async c => (await c.query("SELECT category, count(*)::int AS n FROM alert_conditions WHERE state = 'open' GROUP BY category")).rows).catch(() => []); for (const k of ["malware", "source", "review", "operations"]) this.set({ category: k }, rows.find((r: { category: string; n: number }) => r.category === k)?.n ?? 0); } });
+  new Gauge({ name: "tigeris_alert_deliveries_24h", help: "Alert messages attempted in the last 24 hours, by result", labelNames: ["status"], registers: [registry], async collect() { this.reset(); const rows = await withTenant(opts.pool, opts.institutionId, async c => (await c.query("SELECT status, count(*)::int AS n FROM alert_deliveries WHERE created_at > now() - interval '24 hours' GROUP BY status")).rows).catch(() => []); for (const s of ["sent", "failed", "skipped"]) this.set({ status: s }, rows.find((r: { status: string; n: number }) => r.status === s)?.n ?? 0); } });
   new Gauge({ name: "tigeris_scheduler_enabled", help: "1 when scheduled ingestion is running in this process", registers: [registry], collect() { this.set(opts.scheduler ? 1 : 0); } });
   // The scanner is pinged at most every 30 seconds, whoever asks.
   let scanProbe: { at: number; up: boolean; version: string | null } | null = null;
@@ -269,14 +271,14 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
     return out ?? reply.code(404).send({ error: "not_found" });
   });
 
+  // The tracks and latest period are grouped per series with a hash aggregate, not by sorting every fact of every series (which spilled to disk).
   app.get("/v1/series", async () => tenant(async c => (await c.query(
     `SELECT s.series_key, s.title, s.description, s.frequency, s.packs, s.max_age_days, src.source_key, COALESCE(le.original_agency, src.original_agency) AS original_agency,
-            le.validation_status AS latest_validation, le.id AS latest_evidence_id, le.version AS latest_version,
-            COUNT(DISTINCT (f.subject, f.predicate))::int AS tracks, MAX(f.valid_time) AS latest_period
+            le.validation_status AS latest_validation, le.id AS latest_evidence_id, le.version AS latest_version, COALESCE(t.tracks, 0) AS tracks, t.latest_period
      FROM series s JOIN sources src ON src.id = s.source_id
      LEFT JOIN LATERAL (SELECT e.id, e.version, e.validation_status, e.original_agency FROM evidence_objects e WHERE e.id IN (SELECT evidence_id FROM evidence_facts WHERE series_id = s.id) ORDER BY e.retrieved_at DESC, e.version DESC LIMIT 1) le ON true
-     LEFT JOIN evidence_facts f ON f.series_id = s.id
-     GROUP BY s.id, src.source_key, src.original_agency, le.id, le.version, le.validation_status, le.original_agency ORDER BY s.series_key`)).rows));
+     LEFT JOIN LATERAL (SELECT count(*)::int AS tracks, max(g.latest) AS latest_period FROM (SELECT max(f.valid_time) AS latest FROM evidence_facts f WHERE f.series_id = s.id GROUP BY f.subject, f.predicate) g) t ON true
+     ORDER BY s.series_key`)).rows));
 
   app.get("/v1/series/:key/observations", async (req, reply) => {
     const q = obsQuery.safeParse(req.query);

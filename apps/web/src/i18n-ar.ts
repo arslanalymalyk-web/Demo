@@ -404,5 +404,8 @@ export const ar: Record<string, string> = {
  "Every attempt is recorded and cannot be changed": "تُسجَّل كل محاولة ولا يمكن تغييرها",
  "Alert messages": "رسائل التنبيه",
  "Kind": "النوع",
- "Result": "النتيجة"
+ "Result": "النتيجة",
+ "This screen could not be shown.": "تعذّر عرض هذه الشاشة.",
+ "The rest of TIGERIS still works. Try again, or go back to the Command Centre.": "بقية TIGERIS تعمل. حاول مرة أخرى أو ارجع إلى مركز القيادة.",
+ "Try again": "حاول مرة أخرى"
 };

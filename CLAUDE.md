@@ -30,3 +30,16 @@ Test doubles are called fakes or stubs. Never present simulated values as live f
 - Never commit `.env`. Public sources only until the NDA is signed and a data processing agreement exists.
 - Every change ships with tests. Run `pnpm check` before finishing.
 - Respect source terms: identify the original agency, keep request rates low, honour robots.txt.
+
+## Modules added since the first release (see docs/adr 0013 to 0026)
+`core`, `connectors`, `ingest`, `graph`, `scenario`, `identity`, `cases`, `governance`, `documents`, `sectors`, `settings`, `retention`, `reasoning`, `scheduler`, `setup`, `alerts`. Each exports through its `index.ts`; the API is `apps/api`, the web app `apps/web`.
+
+## More working rules
+- A model never writes a record or a figure. Every model reply is verified by code against stored facts and rejected as a whole on any failure. Only public-record, sample and scenario data may be sent to a model.
+- Uploads are scanned before they are stored and fail closed. A scan verdict is final.
+- A notice sent by email carries a category, a plain reference code and a link, never figures or record content.
+- Visible text goes through `t("English text")`; Arabic lives in `apps/web/src/i18n-ar.ts`. Numbers keep Western digits. `tests/web/i18n.test.ts` fails on a missing entry.
+- Every environment variable the code reads is listed in `docs/handover/CONFIGURATION.md` (a test checks this). Every route needs an `ACCESS` entry.
+- Text and background colours must reach 4.5:1 in both themes (`tests/web/contrast.test.ts`).
+- `pnpm check` runs the wording lint, type check and all unit and integration tests; `pnpm e2e` runs the browser suite against the real API. Run both before finishing a change that touches the web app.
+- Handover documents live in `docs/handover`. Update them, with the verification report and control matrix, whenever behaviour changes. Say plainly what was not verified.

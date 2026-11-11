@@ -67,7 +67,7 @@ Logs are JSON with secrets redacted. Every response carries a request id; use it
 
 ## Alerts
 
-The Alerts screen (administrators and auditors) lists open and recent conditions and every message attempted, with who it was for and the result. "Send a test to me" checks the relay. If messages fail with "could not be reached", check the relay address, port, TLS mode and the network path; with "refused the credentials", the relay password. Failed notices are retried with back-off and then wait for the next daily reminder. Someone with no address is recorded as skipped: set it on the screen. Read failed rows in the message log; there is no separate metric for them. Operations notices cover the audit chain, the malware scanner and the database log archive; the age of the last base backup is not visible to the database, so keep checking that separately.
+The Alerts screen (administrators and auditors) lists open and recent conditions and every message attempted, with who it was for and the result. "Send a test to me" checks the relay. If messages fail with "could not be reached", check the relay address, port, TLS mode and the network path; with "refused the credentials", the relay password. Failed notices are retried with back-off and then wait for the next daily reminder. Someone with no address is recorded as skipped: set it on the screen. Metrics `tigeris_alert_conditions_open{category}` and `tigeris_alert_deliveries_24h{status}` show open conditions and failures; alert on `failed` rising or `malware` or `operations` above zero. Operations notices cover the audit chain, the malware scanner and the database log archive; the age of the last base backup is not visible to the database, so keep checking that separately.
 
 ## Malware scanner
 

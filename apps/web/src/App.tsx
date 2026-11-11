@@ -18,6 +18,7 @@ import { Assistant } from "./views/reasoning";
 import { SourceHealth } from "./views/sourcehealth";
 import { Readiness } from "./views/readiness";
 import { Alerts } from "./views/alerts";
+import { ErrorBoundary } from "./ErrorBoundary";
 import { Settings } from "./views/settings";
 import { MapView } from "./views/map";
 import { Retention } from "./views/retention";
@@ -69,6 +70,7 @@ export default function App(): ReactNode {
 
   const route = useMemo(() => parseRoute(hash), [hash]);
   useEffect(() => { document.getElementById("main")?.focus({ preventScroll: true }); window.scrollTo(0, 0); }, [hash]);
+  useEffect(() => { const n = NAV.find(x => x.view.includes(route.view) && (!x.id || x.id === route.id)); document.title = phase.name === "ready" && n ? `${t(n.label)} · TIGERIS` : "TIGERIS"; }, [phase.name, route, language]);
 
   if (phase.name === "starting") return <div className="signin" role="status">{t("Signing in…")}</div>;
   if (phase.name === "signed-out") return <SignIn {...(phase.error ? { error: phase.error } : {})} />;
@@ -133,7 +135,7 @@ export default function App(): ReactNode {
           <span className="who">{me.displayName ?? me.subject} · {me.roles.map(r => t(r)).join("، ") || t("no role")}</span>
           <button onClick={() => { setToken(null); setPhase({ name: "signed-out" }); }}>{t("Sign out")}</button>
         </header>
-        <main className="content" id="main" tabIndex={-1} key={hash}>{body}</main>
+        <main className="content" id="main" tabIndex={-1} key={hash}><ErrorBoundary>{body}</ErrorBoundary></main>
       </div>
     </div>
   );

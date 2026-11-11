@@ -8,6 +8,9 @@ import { loadConfig } from "./config.js";
 import { buildServer } from "./server.js";
 import { checkRuntimeSafety } from "./startup.js";
 
+// A fault nobody caught must not leave the process half alive. Say what happened in one structured line and exit, so the container restarts it cleanly.
+for (const ev of ["uncaughtException", "unhandledRejection"] as const) process.on(ev, e => { console.error(JSON.stringify({ level: "fatal", msg: ev, error: e instanceof Error ? e.message : String(e) })); process.exit(1); });
+
 let cfg;
 try { cfg = loadConfig(); } catch (e) { console.error((e as Error).message); process.exit(2); }
 const pool = new pg.Pool({ connectionString: cfg.databaseUrl, max: Number(process.env.DB_POOL_MAX ?? 10), idleTimeoutMillis: 30_000, connectionTimeoutMillis: 5_000 });

@@ -20,6 +20,7 @@ test.describe("every screen", () => {
       await go(page, hash);
       await expect(page.getByRole("heading", { level: 1, name: heading }), name).toBeVisible();
       await page.waitForLoadState("networkidle");
+      expect(await page.title(), `${name} has no page title`).toMatch(/ · TIGERIS$/);
       expect(await accessibilityBasics(page, name), name).toEqual([]);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), `${name} scrolls sideways`).toBe(true);
     }
