@@ -32,7 +32,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 CMD node 
 ENTRYPOINT ["/usr/bin/tini", "--", "node", "--import", "tsx", "apps/api/src/main.ts"]
 
 # --- Web app and TLS reverse proxy. Listens on 8080 (redirect only) and 8443; the platform maps them to 80 and 443.
-FROM nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10 AS web
+FROM nginx:1.31-alpine@sha256:713fc2ebfd92e8217db451477182ee91944b123d2b1ee9fd5a8c6e91ca6c3a11 AS web
 COPY deploy/nginx/nginx.conf /etc/nginx/nginx.conf
 COPY deploy/nginx/proxy_params.conf /etc/nginx/proxy_params.conf
 COPY deploy/nginx/default.conf.template /etc/nginx/templates/default.conf.template
