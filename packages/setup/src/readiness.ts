@@ -6,7 +6,7 @@ import { activePolicy } from "../../governance/src/store.js";
 import { SCOPES, SCOPE_INFO, activeOf } from "../../settings/src/index.js";
 import type { Check } from "./checks.js";
 
-export interface Facts { clientDataEnabled: boolean; scanner: { configured: boolean; reachable: boolean }; scheduler: { enabled: boolean }; reasoning: { provider: string | null }; alerts: { configured: boolean; transport: string | null }; backupMaxAgeHours: number; auditAnchorConfigured?: boolean }
+export interface Facts { clientDataEnabled: boolean; scanner: { configured: boolean; reachable: boolean }; scheduler: { enabled: boolean }; reasoning: { provider: string | null }; alerts: { configured: boolean; transport: string | null }; backupMaxAgeHours: number; auditAnchorConfigured?: boolean; documentKeyConfigured?: boolean }
 const c = (id: string, title: string, status: Check["status"], detail: string, href?: string): Check & { href?: string } => ({ id, title, status, detail, ...(href ? { href } : {}) });
 
 /** Is this deployment ready for real use? Read from stored facts and the running configuration. "Fail" blocks use, "warn" needs a decision, "manual" needs a person to confirm. */
@@ -50,6 +50,7 @@ export async function installationReadiness(cx: pg.PoolClient, f: Facts): Promis
     : bk.state === "overdue" ? c("base_backup", "Base backups monitored", "fail", `The last good base backup is ${bk.lastOkAgeHours} hours old; the limit is ${bk.maxAgeHours} hours.`)
     : c("base_backup", "Base backups monitored", "fail", "No base backup has ever been recorded. Check that the backup job runs and can write to the database."));
   if (f.auditAnchorConfigured !== undefined) out.push(f.auditAnchorConfigured ? c("audit_anchor", "Audit checkpoints can be signed", "pass", "A signing key is set. Take a checkpoint regularly and keep it off this server.", "#/audit") : c("audit_anchor", "Audit checkpoints can be signed", "warn", "No signing key (TIGERIS_AUDIT_ANCHOR_KEY). Without it, someone with full database rights could rewrite the audit trail without any outside proof.", "#/audit"));
+  if (f.documentKeyConfigured !== undefined) out.push(f.documentKeyConfigured ? c("document_key", "Document contents sealed by the application", "pass", "A document key is set. Back it up separately from the database: without it sealed documents cannot be read.") : f.clientDataEnabled ? c("document_key", "Document contents sealed by the application", "fail", "Institution documents are enabled but no document key is set (TIGERIS_DOCUMENT_KEY); their contents would be stored unsealed.") : c("document_key", "Document contents sealed by the application", "warn", "No document key (TIGERIS_DOCUMENT_KEY). Set one before institution documents are enabled."));
   out.push(c("encryption_at_rest", "Storage encrypted at rest", "manual", "Confirm that the database volume, the backup location and the log archive are on encrypted storage whose keys the institution holds. The application cannot check this."));
   out.push(c("backup", "Restore drill done in this environment", "manual", "Run the backup restore drill and record the result before go-live."));
   out.push(c("pentest", "Independent penetration test", "manual", "Required by decision 11 before any client data."));

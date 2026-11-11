@@ -1,3 +1,4 @@
+import { DocumentCrypto, DocumentKeyError, documentCrypto, words } from "./crypt.js";
 import { createHash } from "node:crypto";
 import type pg from "pg";
 import { PoliteHttp, type Connector } from "../../connectors/src/index.js";
@@ -9,6 +10,19 @@ import { extract } from "./extract.js";
 import { IntakeError, sniff } from "./sniff.js";
 import { ScannerUnavailable, scanBackoffMs, type Scanner, type Verdict } from "./scan.js";
 import { tools } from "./tools.js";
+
+const fileAad = (inst: string, doc: string) => `${inst}|${doc}|file`;
+const pageAad = (inst: string, doc: string, n: number) => `${inst}|${doc}|page|${n}`;
+/** A stored file as plain bytes: sealed files are opened, files stored before sealing was switched on are returned as they are. */
+function openFile(stored: Buffer, inst: string, doc: string): Buffer {
+  if (!DocumentCrypto.isSealed(stored)) return stored;
+  const dc = documentCrypto(); if (!dc) throw new DocumentKeyError("this file is sealed and no document key is configured");
+  return dc.open(stored, fileAad(inst, doc));
+}
+function openPage(stored: Buffer, inst: string, doc: string, n: number): string {
+  const dc = documentCrypto(); if (!dc) throw new DocumentKeyError("this page is sealed and no document key is configured");
+  return dc.open(stored, pageAad(inst, doc, n)).toString("utf8");
+}
 
 export type DocDataClass = "public_record" | "institution_own" | "sample_dataset";
 export const DOC_CLASSES: DocDataClass[] = ["public_record", "institution_own", "sample_dataset"];
@@ -46,7 +60,7 @@ export async function submitDocument(c: pg.PoolClient, inst: string, actorId: st
     [inst, (i.title?.trim() || name).slice(0, 300), name, s.mime, i.buffer.length, sha, i.dataClass, i.originalAgency?.trim() || null, i.sourceUrl?.trim() || null, i.rights.trim(), i.languages ?? "eng", actorId,
       infected ? "quarantined" : "queued", scanStatus, scan.verdict ? scan.engine : null, infected, scan.verdict ? new Date().toISOString() : null, infected ? new Date().toISOString() : null, infected ? `The malware scanner flagged this file (${infected}). It was not opened and cannot be downloaded.` : null]);
   // A file the scanner flagged is recorded but its bytes are not kept.
-  if (!infected) await c.query("INSERT INTO document_files (institution_id, document_id, content) VALUES ($1,$2,$3)", [inst, r.rows[0].id, i.buffer]);
+  if (!infected) await c.query("INSERT INTO document_files (institution_id, document_id, content) VALUES ($1,$2,$3)", [inst, r.rows[0].id, documentCrypto() ? documentCrypto()!.seal(i.buffer, fileAad(inst, r.rows[0].id)) : i.buffer]);
   await audit(c, inst, { actorType: "principal", actorId, action: "document.uploaded", objectType: "document", objectId: r.rows[0].id, payload: { sha256: sha, mime: s.mime, bytes: i.buffer.length, dataClass: i.dataClass, scan: scanStatus } });
   if (infected) await audit(c, inst, { actorType: "system", action: "document.malware_detected", objectType: "document", objectId: r.rows[0].id, payload: { sha256: sha, signature: infected, engine: scan.engine, uploadedBy: actorId } });
   return { id: r.rows[0].id, status: infected ? "quarantined" : "queued", duplicate: false, scanStatus };
@@ -67,7 +81,7 @@ async function scanGate(pool: pg.Pool, inst: string, docId: string, scanner: Sca
   });
   if (!scanner) return defer("no malware scanner is configured, so the file is held");
   let v: Verdict;
-  try { v = await scanner.scan(d.content); } catch (e) { return defer(e instanceof ScannerUnavailable ? e.message : "the scan could not be completed"); }
+  try { v = await scanner.scan(openFile(d.content, inst, docId)); } catch (e) { return defer(e instanceof ScannerUnavailable ? e.message : "the scan could not be completed"); }
   return withTenant(pool, inst, async c => {
     if (v.clean) { await c.query("UPDATE documents SET scan_status = 'clean', scan_engine = $2, scanned_at = now(), scan_error = NULL, scan_next_at = NULL WHERE id = $1", [docId, scanner.engine]); await audit(c, inst, { actorType: "system", action: "document.scanned", objectType: "document", objectId: docId, payload: { engine: scanner.engine, verdict: "clean" } }); return "go" as const; }
     await c.query("UPDATE documents SET status = 'quarantined', scan_status = 'infected', scan_engine = $2, scan_signature = $3, scanned_at = now(), processed_at = now(), scan_error = NULL, scan_next_at = NULL, error = $4 WHERE id = $1", [docId, scanner.engine, v.signature, `The malware scanner flagged this file (${v.signature}). It was not opened and cannot be downloaded.`]);
@@ -89,7 +103,7 @@ export async function processDocument(pool: pg.Pool, inst: string, docId: string
   });
   if (!loaded) return "skipped";
   try {
-    const x = await extract(loaded.content, { languages: loaded.languages });
+    const x = await extract(openFile(loaded.content, inst, docId), { languages: loaded.languages });
     const pages = x.pages.map(p => ({ ...p, sha: createHash("sha256").update(p.text).digest("hex") }));
     const record: RawRecord = {
       externalKey: `document:${loaded.sha256}`, kind: "document", sourceUrl: loaded.source_url, originalAgency: loaded.original_agency, eventTime: x.created && Date.parse(x.created) <= now().getTime() ? x.created : null,
@@ -103,7 +117,11 @@ export async function processDocument(pool: pg.Pool, inst: string, docId: string
     return await withTenant(pool, inst, async c => {
       const ev = await c.query("SELECT e.id, e.validation_status FROM evidence_objects e JOIN sources s ON s.id = e.source_id WHERE s.source_key = $1 AND e.external_key = $2 ORDER BY e.version DESC LIMIT 1", [sourceKey, record.externalKey]);
       const status = ev.rows[0].validation_status === "quarantined" ? "quarantined" : "ready";
-      for (const p of pages) await c.query("INSERT INTO document_pages (institution_id, document_id, page_no, method, text, char_count, confidence, text_sha256) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)", [inst, docId, p.pageNo, p.method, p.text, p.text.length, p.confidence, p.sha]);
+      const dc = documentCrypto();
+      for (const p of pages) {
+        await c.query("INSERT INTO document_pages (institution_id, document_id, page_no, method, text, text_enc, char_count, confidence, text_sha256) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)", [inst, docId, p.pageNo, p.method, dc ? "" : p.text, dc ? dc.seal(Buffer.from(p.text, "utf8"), pageAad(inst, docId, p.pageNo)) : null, p.text.length, p.confidence, p.sha]);
+        if (dc) { const t = [...dc.terms(p.text).values()]; if (t.length) await c.query("INSERT INTO document_terms (institution_id, document_id, page_no, term, freq) SELECT $1, $2, $3, x.term, x.freq FROM unnest($4::bytea[], $5::int[]) AS x(term, freq)", [inst, docId, p.pageNo, t.map(e => e.token), t.map(e => e.freq)]); }
+      }
       await c.query("UPDATE documents SET status = $2, evidence_id = $3, page_count = $4, language = $5, ocr_used = $6, avg_confidence = $7, processed_at = now() WHERE id = $1", [docId, status, ev.rows[0].id, pages.length, x.language, x.ocrUsed, x.avgConfidence]);
       await audit(c, inst, { actorType: "system", action: "document.processed", objectType: "document", objectId: docId, payload: { status, pages: pages.length, ocrUsed: x.ocrUsed, language: x.language } });
       return status;
@@ -164,16 +182,41 @@ export async function getDocument(c: pg.PoolClient, id: string): Promise<unknown
   return { ...d, uploaded_by_name: who, pages, tools: await tools() };
 }
 export async function getPage(c: pg.PoolClient, id: string, n: number): Promise<{ page_no: number; method: string; text: string; confidence: number | null } | null> {
-  return (await c.query("SELECT page_no, method, text, confidence FROM document_pages WHERE document_id = $1 AND page_no = $2", [id, n])).rows[0] ?? null;
+  const r = (await c.query("SELECT institution_id, page_no, method, text, text_enc, confidence FROM document_pages WHERE document_id = $1 AND page_no = $2", [id, n])).rows[0];
+  if (!r) return null;
+  return { page_no: r.page_no, method: r.method, text: r.text_enc ? openPage(r.text_enc, r.institution_id, id, n) : r.text, confidence: r.confidence };
 }
 export async function searchDocuments(c: pg.PoolClient, q: string): Promise<unknown[]> {
-  return (await c.query(
+  const plain = (await c.query(
     `SELECT d.id, d.title, d.data_class, p.page_no, p.method,
             ts_headline('simple', p.text, plainto_tsquery('simple', $1), 'StartSel=⟦, StopSel=⟧, MaxFragments=1, MaxWords=32, MinWords=12') AS snippet,
             ts_rank(to_tsvector('simple', p.text), plainto_tsquery('simple', $1)) AS rank
      FROM document_pages p JOIN documents d ON d.id = p.document_id
-     WHERE d.status = 'ready' AND to_tsvector('simple', p.text) @@ plainto_tsquery('simple', $1)
-     ORDER BY rank DESC, d.created_at DESC LIMIT 30`, [q])).rows;
+     WHERE d.status = 'ready' AND p.text_enc IS NULL AND to_tsvector('simple', p.text) @@ plainto_tsquery('simple', $1)
+     ORDER BY rank DESC, d.created_at DESC LIMIT 30`, [q])).rows as { rank: number }[];
+  const dc = documentCrypto(), want = [...new Set(words(q))];
+  if (!dc || want.length === 0) return plain;
+  // Sealed pages: look the words up by their keyed tokens, keep pages that hold every word, rank by how often they occur, and build the snippet from the decrypted page.
+  const variants = want.map(w => dc.tokensFor(w)), flat = variants.flat();
+  const hits = (await c.query(
+    `SELECT t.institution_id, t.document_id, t.page_no, t.term, t.freq FROM document_terms t JOIN documents d ON d.id = t.document_id
+     WHERE d.status = 'ready' AND t.term = ANY($1::bytea[]) LIMIT 50000`, [flat])).rows as { institution_id: string; document_id: string; page_no: number; term: Buffer; freq: number }[];
+  const which = new Map<string, number>(); variants.forEach((vs, i) => vs.forEach(v => which.set(v.toString("hex"), i)));
+  const pages = new Map<string, { inst: string; doc: string; page: number; seen: Set<number>; score: number }>();
+  for (const h of hits) { const k = `${h.document_id}:${h.page_no}`, e = pages.get(k) ?? { inst: h.institution_id, doc: h.document_id, page: h.page_no, seen: new Set<number>(), score: 0 }; e.seen.add(which.get(h.term.toString("hex"))!); e.score += h.freq; pages.set(k, e); }
+  const top = [...pages.values()].filter(e => e.seen.size === want.length).sort((a, b) => b.score - a.score).slice(0, 30);
+  if (top.length === 0) return plain;
+  const meta = (await c.query("SELECT d.id, d.title, d.data_class, d.created_at, p.page_no, p.method, p.text_enc FROM document_pages p JOIN documents d ON d.id = p.document_id WHERE (p.document_id, p.page_no) IN (SELECT * FROM unnest($1::uuid[], $2::int[]))", [top.map(e => e.doc), top.map(e => e.page)])).rows;
+  const sealed = top.map(e => { const m = meta.find(x => x.id === e.doc && x.page_no === e.page); return m ? { e, m, text: openPage(m.text_enc, e.inst, e.doc, e.page) } : null; }).filter((x): x is NonNullable<typeof x> => x !== null);
+  const rows = sealed.map(({ e, m, text }) => ({ id: m.id, title: m.title, data_class: m.data_class, page_no: m.page_no, method: m.method, snippet: snippetOf(text, want), rank: e.score }));
+  return [...plain, ...rows].sort((a, b) => b.rank - a.rank).slice(0, 30);
+}
+/** A short stretch of the page around the first matching word, with the words marked as the database's own highlighter does. */
+function snippetOf(text: string, want: string[]): string {
+  const lower = text.toLowerCase(); let at = -1;
+  for (const w of want) { const i = lower.indexOf(w); if (i >= 0 && (at < 0 || i < at)) at = i; }
+  const from = Math.max(0, at - 90), part = text.slice(from, from + 220);
+  return (from > 0 ? "… " : "") + part.replace(new RegExp(want.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "giu"), m => `⟦${m}⟧`) + (from + 220 < text.length ? " …" : "");
 }
 /** The original file, for download. Every download is written to the audit trail. */
 export async function downloadDocument(c: pg.PoolClient, inst: string, actorId: string, id: string): Promise<{ content: Buffer; mime: string; filename: string } | null> {
@@ -182,8 +225,9 @@ export async function downloadDocument(c: pg.PoolClient, inst: string, actorId: 
   if (r.scan_status === "infected") throw new IntakeError("this file was flagged by the malware scanner and cannot be downloaded", "forbidden");
   if (r.scan_status === "pending" || r.scan_status === "error") throw new IntakeError("this file is waiting for a malware scan and cannot be downloaded yet", "forbidden");
   if (!r.content) return null;
+  const content = openFile(r.content, inst, id);
   await audit(c, inst, { actorType: "principal", actorId, action: "document.downloaded", objectType: "document", objectId: id, payload: {} });
-  return { content: r.content, mime: r.mime, filename: r.filename };
+  return { content, mime: r.mime, filename: r.filename };
 }
 
 /** How many documents are in each scan state, for the Documents screen and the metrics. */

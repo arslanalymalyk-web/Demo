@@ -11,6 +11,7 @@ export interface Config {
   alerts: { enabled: boolean; transport: "smtp" | "log"; host: string; port: number; security: "starttls" | "tls" | "none"; user: string | null; password: string | null; from: string; baseUrl: string; reminderHours: number; maxPerHour: number };
   backupMaxAgeHours: number;
   auditAnchorKey: string | null;
+  documentKeys: { current: string; previous: string[] } | null;
   checkpoint: { dir: string; everyHours: number } | null;
   scanner: { kind: "off" | "clamav" | "stub"; host: string; port: number; socket: string };
   clientDataEnabled: boolean; metricsToken: string | null; trustProxy: boolean; logLevel: string; rateLimit: { max: number; timeWindow: string } | null;
@@ -40,6 +41,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const cpDir = env.TIGERIS_AUDIT_CHECKPOINT_DIR || "", cpHours = Number(env.TIGERIS_AUDIT_CHECKPOINT_HOURS ?? 24);
   if (cpDir && !auditAnchorKey) problems.push("TIGERIS_AUDIT_CHECKPOINT_DIR needs TIGERIS_AUDIT_ANCHOR_KEY, which signs the checkpoints");
   if (!Number.isInteger(cpHours) || cpHours < 1 || cpHours > 720) problems.push("TIGERIS_AUDIT_CHECKPOINT_HOURS must be a whole number between 1 and 720");
+  const docKey = env.TIGERIS_DOCUMENT_KEY || null, docPrev = (env.TIGERIS_DOCUMENT_KEY_PREVIOUS ?? "").split(",").map(x => x.trim()).filter(Boolean);
+  if (docKey && docKey.length < 32) problems.push("TIGERIS_DOCUMENT_KEY must be at least 32 characters");
+  if (docPrev.some(k => k.length < 32)) problems.push("every key in TIGERIS_DOCUMENT_KEY_PREVIOUS must be at least 32 characters");
+  if (docPrev.length && !docKey) problems.push("TIGERIS_DOCUMENT_KEY_PREVIOUS needs TIGERIS_DOCUMENT_KEY");
+  if (production && env.TIGERIS_CLIENT_DATA_ENABLED === "true" && !docKey) problems.push("institution documents are enabled but TIGERIS_DOCUMENT_KEY is not set, so their contents would be stored unsealed");
   const provider = env.TIGERIS_REASONING_PROVIDER ?? "off", model = env.TIGERIS_MODEL_NAME ?? "", apiKey = env.TIGERIS_MODEL_API_KEY || null;
   let baseUrl = env.TIGERIS_MODEL_BASE_URL ?? "";
   if (!["off", "anthropic", "openai_compatible", "local_extractive"].includes(provider)) problems.push("TIGERIS_REASONING_PROVIDER must be off, anthropic, openai_compatible or local_extractive");
@@ -76,7 +82,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   if (problems.length) throw new Error(`configuration refused:\n - ${problems.join("\n - ")}`);
   return {
     production, databaseUrl, institutionId, port: Number(env.PORT ?? 3000), host: env.HOST ?? "127.0.0.1", oidc: { issuer, audience, jwksUri, requireMfa, maxTokenAgeSeconds },
-    alerts: al as Config["alerts"], backupMaxAgeHours: backupMax, auditAnchorKey, checkpoint: cpDir && auditAnchorKey ? { dir: cpDir, everyHours: cpHours } : null,
+    alerts: al as Config["alerts"], backupMaxAgeHours: backupMax, auditAnchorKey, documentKeys: docKey ? { current: docKey, previous: docPrev } : null, checkpoint: cpDir && auditAnchorKey ? { dir: cpDir, everyHours: cpHours } : null,
     scanner: { kind: kind as Config["scanner"]["kind"], host: clamHost, port: clamPort, socket: clamSocket },
     scheduler: { enabled: env.TIGERIS_SCHEDULER_ENABLED === "true", tickSeconds: tick },
     reasoning: { provider: provider as Config["reasoning"]["provider"], model, baseUrl, apiKey },

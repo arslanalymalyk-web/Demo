@@ -1,5 +1,5 @@
 import pg from "pg";
-import { DocumentQueue, clamavScanner, stubScanner, type Scanner } from "../../../packages/documents/src/index.js";
+import { DocumentCrypto, DocumentQueue, useDocumentCrypto, clamavScanner, stubScanner, type Scanner } from "../../../packages/documents/src/index.js";
 import { getLockdown, oidcVerifier, remoteKeys } from "../../../packages/identity/src/index.js";
 import { CheckpointRunner } from "../../../packages/ingest/src/anchor-runner.js";
 import { withTenant } from "../../../packages/ingest/src/store.js";
@@ -42,6 +42,7 @@ if (cfg.alerts.enabled) {
   try { mailer = createMailer({ transport: a.transport, host: a.host, port: a.port, security: a.security, user: a.user, password: a.password, from: a.from, production: cfg.production }); await mailer.verify(); console.log(JSON.stringify({ level: "info", msg: "alert relay answered", transport: a.transport })); }
   catch (e) { console.error(JSON.stringify({ level: "warn", msg: "alert relay is not answering; notices will be retried", error: (e as Error).message })); }
 }
+if (cfg.documentKeys) useDocumentCrypto(new DocumentCrypto(cfg.documentKeys.current, cfg.documentKeys.previous));
 const documents = new DocumentQueue(pool, cfg.institutionId, () => new Date(), scanner);
 const scheduler = cfg.scheduler.enabled ? new Scheduler({ pool, institutionId: cfg.institutionId, run: ingestJob(pool, cfg.institutionId), tickMs: cfg.scheduler.tickSeconds * 1000, halted: () => withTenant(pool, cfg.institutionId, async c => (await getLockdown(c)).locked), log: (m, o) => console.log(JSON.stringify({ level: "info", msg: m, ...o })) }) : null;
 const alertRunner = mailer ? new AlertRunner({ pool, institutionId: cfg.institutionId, mailer, baseUrl: cfg.alerts.baseUrl, backupMaxAgeHours: cfg.backupMaxAgeHours, ...(cfg.checkpoint ? { checkpointMaxAgeHours: cfg.checkpoint.everyHours * 2 } : {}), engine: { reminderHours: cfg.alerts.reminderHours, maxPerHour: cfg.alerts.maxPerHour }, ...(scanner ? { scanner: async () => ({ configured: true, reachable: await scanner.ping().then(() => true, () => false) }) } : {}), log: (m, o) => console.log(JSON.stringify({ level: "info", msg: m, ...o })) }) : null;

@@ -87,6 +87,10 @@ If drafts fail with "the model could not be reached", check the egress network, 
 
 Nothing is deleted automatically. Use the Retention screen for the ten-year report, to place or release a legal hold on a case, and to export a case with its integrity hash. Held cases must not be removed from any storage by hand.
 
+## Document key
+
+When institution documents are on, set `TIGERIS_DOCUMENT_KEY` (from the secret store, at least 32 characters) before the first upload and back it up somewhere the database backup is not. Without it sealed documents cannot be read, and the Readiness screen fails. To replace the key, put the new one in `TIGERIS_DOCUMENT_KEY` and the old one in `TIGERIS_DOCUMENT_KEY_PREVIOUS`; keep old keys as long as the documents they sealed exist.
+
 ## Ending access and stopping the system
 
 - **One person:** Administration, "End sessions" (their tokens stop working at once; they sign in again through the identity provider). "Disable" also blocks them from signing in.

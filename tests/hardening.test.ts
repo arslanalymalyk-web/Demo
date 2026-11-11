@@ -37,7 +37,9 @@ describe("configuration", () => {
     expect(cfg({ ...prod, OIDC_REQUIRE_MFA_CLAIM: "false", TIGERIS_ALLOW_NO_MFA_CLAIM: "true" }).oidc.requireMfa).toBe(false);
     expect(() => cfg({ ...prod, TIGERIS_CLIENT_DATA_ENABLED: "true", TIGERIS_SCANNER: "clamav", TIGERIS_CLAMAV_HOST: "scan" })).toThrow(/security review/);
     expect(() => cfg({ ...prod, TIGERIS_CLIENT_DATA_ENABLED: "true", TIGERIS_CLIENT_DATA_REVIEW_DONE: "true" })).toThrow(/real malware scanner/);
-    expect(cfg({ ...prod, TIGERIS_CLIENT_DATA_ENABLED: "true", TIGERIS_CLIENT_DATA_REVIEW_DONE: "true", TIGERIS_SCANNER: "clamav", TIGERIS_CLAMAV_HOST: "scan" }).clientDataEnabled).toBe(true);
+    const ready = { ...prod, TIGERIS_CLIENT_DATA_ENABLED: "true", TIGERIS_CLIENT_DATA_REVIEW_DONE: "true", TIGERIS_SCANNER: "clamav", TIGERIS_CLAMAV_HOST: "scan" };
+    expect(() => cfg(ready)).toThrow(/TIGERIS_DOCUMENT_KEY is not set/);
+    expect(cfg({ ...ready, TIGERIS_DOCUMENT_KEY: "d".repeat(40) }).clientDataEnabled).toBe(true);
     expect(() => cfg({ ...prod, METRICS_TOKEN: "short" })).toThrow(/at least 24/);
   });
   it("reads secrets from mounted files, trimmed, and refuses ambiguity or a missing file", () => {

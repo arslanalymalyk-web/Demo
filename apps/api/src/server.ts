@@ -12,7 +12,7 @@ import { audit } from "../../../packages/ingest/src/store.js";
 import { PagingError, keysetPage, likePattern, type Page } from "../../../packages/core/src/index.js";
 import { CaseError, addEvidence, addParticipant, addRecommendation, openCaseFromSignal, addScenario, closeCase, createCase, decide, getCase, listCases, listCasesPage, listHandoffsPage, searchMemoryPage, startAnalysis, submitForReview, updateHandoff } from "../../../packages/cases/src/index.js";
 import { GovernanceError, activatePolicy, createPolicyDraft, listPolicies } from "../../../packages/governance/src/index.js";
-import { IntakeError, tools as docTools, downloadDocument, getDocument, getPage, listDocumentsPage, retryDocument, searchDocuments, submitDocument, type DocumentQueue, type Scanner, type Verdict, scanSummary } from "../../../packages/documents/src/index.js";
+import { IntakeError, documentCrypto, tools as docTools, downloadDocument, getDocument, getPage, listDocumentsPage, retryDocument, searchDocuments, submitDocument, type DocumentQueue, type Scanner, type Verdict, scanSummary } from "../../../packages/documents/src/index.js";
 import { RetentionError, exportCase, holdFor, placeHold, releaseHold, retentionReport } from "../../../packages/retention/src/index.js";
 import { SCOPES, SCOPE_INFO, DEFAULT_SIGNAL_RULES, SettingsError, activate as activateSetting, activeOf, createDraft as createSettingDraft, effectiveScenarioDefaults, effectiveSchedule, effectiveThresholds, listVersions as listSettings, type Scope } from "../../../packages/settings/src/index.js";
 import { SECTORS, buildMap, buildSector, composeBriefing, isPack, type BriefingCase, type BriefingRun } from "../../../packages/sectors/src/index.js";
@@ -518,7 +518,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   });
 
   // Installation readiness: what is still open before real use. Read from stored facts and the running configuration.
-  app.get("/v1/readiness", async () => { const sc = await scannerState(); return tenant(c => installationReadiness(c, { clientDataEnabled: opts.clientDataEnabled === true, scanner: { configured: sc.configured, reachable: sc.reachable }, scheduler: { enabled: !!opts.scheduler }, alerts: { configured: !!opts.alerts, transport: opts.alerts?.mailer.transport ?? null }, backupMaxAgeHours: opts.backupMaxAgeHours ?? 0, auditAnchorConfigured: Boolean(opts.auditAnchorKey), reasoning: { provider: opts.reasoning ? `${opts.reasoning.adapter.provider} · ${opts.reasoning.adapter.model}` : null } })); });
+  app.get("/v1/readiness", async () => { const sc = await scannerState(); return tenant(c => installationReadiness(c, { clientDataEnabled: opts.clientDataEnabled === true, scanner: { configured: sc.configured, reachable: sc.reachable }, scheduler: { enabled: !!opts.scheduler }, alerts: { configured: !!opts.alerts, transport: opts.alerts?.mailer.transport ?? null }, backupMaxAgeHours: opts.backupMaxAgeHours ?? 0, auditAnchorConfigured: Boolean(opts.auditAnchorKey), documentKeyConfigured: documentCrypto() !== null, reasoning: { provider: opts.reasoning ? `${opts.reasoning.adapter.provider} · ${opts.reasoning.adapter.model}` : null } })); });
   // Source health and scheduled ingestion. The schedule is a governed setting; these routes read state and let an operator run, pause or resume one source.
   app.get("/v1/sources/health", async () => tenant(async c => {
     const { schedule, version } = await effectiveSchedule(c);
