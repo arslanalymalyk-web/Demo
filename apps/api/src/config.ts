@@ -11,6 +11,7 @@ export interface Config {
   alerts: { enabled: boolean; transport: "smtp" | "log"; host: string; port: number; security: "starttls" | "tls" | "none"; user: string | null; password: string | null; from: string; baseUrl: string; reminderHours: number; maxPerHour: number };
   backupMaxAgeHours: number;
   auditAnchorKey: string | null;
+  breakGlassPublicKey: string | null;
   documentKeys: { current: string; previous: string[] } | null;
   checkpoint: { dir: string; everyHours: number } | null;
   scanner: { kind: "off" | "clamav" | "stub"; host: string; port: number; socket: string };
@@ -82,11 +83,19 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   if (problems.length) throw new Error(`configuration refused:\n - ${problems.join("\n - ")}`);
   return {
     production, databaseUrl, institutionId, port: Number(env.PORT ?? 3000), host: env.HOST ?? "127.0.0.1", oidc: { issuer, audience, jwksUri, requireMfa, maxTokenAgeSeconds },
-    alerts: al as Config["alerts"], backupMaxAgeHours: backupMax, auditAnchorKey, documentKeys: docKey ? { current: docKey, previous: docPrev } : null, checkpoint: cpDir && auditAnchorKey ? { dir: cpDir, everyHours: cpHours } : null,
+    alerts: al as Config["alerts"], backupMaxAgeHours: backupMax, auditAnchorKey, breakGlassPublicKey: env.TIGERIS_BREAKGLASS_PUBLIC_KEY || null, documentKeys: docKey ? { current: docKey, previous: docPrev } : null, checkpoint: cpDir && auditAnchorKey ? { dir: cpDir, everyHours: cpHours } : null,
     scanner: { kind: kind as Config["scanner"]["kind"], host: clamHost, port: clamPort, socket: clamSocket },
     scheduler: { enabled: env.TIGERIS_SCHEDULER_ENABLED === "true", tickSeconds: tick },
     reasoning: { provider: provider as Config["reasoning"]["provider"], model, baseUrl, apiKey },
     clientDataEnabled: env.TIGERIS_CLIENT_DATA_ENABLED === "true", metricsToken: env.METRICS_TOKEN || null, trustProxy: env.TIGERIS_TRUST_PROXY === "true", logLevel: env.LOG_LEVEL ?? "info",
     rateLimit: max === 0 ? null : { max, timeWindow: "1 minute" },
   };
+}
+
+/** Mail goes through the egress proxy too, unless the relay is on the internal network (listed in NO_PROXY) or an explicit proxy is named. */
+export function smtpProxy(env: NodeJS.ProcessEnv, host: string): string | null {
+  if (env.TIGERIS_SMTP_PROXY) return env.TIGERIS_SMTP_PROXY === "none" ? null : env.TIGERIS_SMTP_PROXY;
+  const p = env.HTTPS_PROXY || env.https_proxy; if (!p) return null;
+  const skip = (env.NO_PROXY || env.no_proxy || "").split(",").map(x => x.trim().toLowerCase()).filter(Boolean);
+  return skip.some(x => x === "*" || host.toLowerCase() === x.replace(/^\./, "") || host.toLowerCase().endsWith(x.startsWith(".") ? x : `.${x}`)) ? null : p;
 }

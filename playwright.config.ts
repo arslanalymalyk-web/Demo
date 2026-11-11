@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { defineConfig } from "@playwright/test";
+import { publicKeyFromShares } from "./packages/identity/src/breakglass.js";
+import { TEST_SHARE_A, TEST_SHARE_B } from "./e2e/emergency-shares.js";
 
 try { process.loadEnvFile(".env"); } catch { /* the environment may already provide the variables */ }
 // One institution per run. Workers read the same value because it is set before they start.
@@ -18,7 +20,7 @@ export default defineConfig({
     // The real API against the test database, after the seed has made this run's institution.
     { command: "node --import tsx e2e/seed.ts && node --import tsx apps/api/src/main.ts", url: `http://127.0.0.1:${api}/ready`, reuseExistingServer: false, timeout: 120_000, stdout: "pipe", stderr: "pipe",
       env: { E2E_INSTITUTION_ID: inst, DATABASE_URL_TEST_OWNER: ownerUrl, DATABASE_URL: appUrl, TIGERIS_INSTITUTION_ID: inst, PORT: String(api), HOST: "127.0.0.1", OIDC_ISSUER: `http://127.0.0.1:${idp}`, OIDC_AUDIENCE: "tigeris-api", OIDC_JWKS_URI: `http://127.0.0.1:${idp}/jwks`,
-        TIGERIS_SCANNER: "stub", TIGERIS_AUDIT_ANCHOR_KEY: "e2e-audit-anchor-key-0123456789abcdef", TIGERIS_ALERTS_ENABLED: "true", TIGERIS_ALERTS_TRANSPORT: "log", TIGERIS_ALERTS_FROM: "TIGERIS <alerts@e2e.example>", TIGERIS_WEB_BASE_URL: `http://127.0.0.1:${web}`, TIGERIS_REASONING_PROVIDER: "local_extractive", RATE_LIMIT_PER_MINUTE: "0", LOG_LEVEL: "warn" } },
+        TIGERIS_SCANNER: "stub", TIGERIS_BREAKGLASS_PUBLIC_KEY: Buffer.from(publicKeyFromShares(TEST_SHARE_A, TEST_SHARE_B)).toString("base64"), TIGERIS_AUDIT_ANCHOR_KEY: "e2e-audit-anchor-key-0123456789abcdef", TIGERIS_ALERTS_ENABLED: "true", TIGERIS_ALERTS_TRANSPORT: "log", TIGERIS_ALERTS_FROM: "TIGERIS <alerts@e2e.example>", TIGERIS_WEB_BASE_URL: `http://127.0.0.1:${web}`, TIGERIS_REASONING_PROVIDER: "local_extractive", RATE_LIMIT_PER_MINUTE: "0", LOG_LEVEL: "warn" } },
     { command: `node_modules/.bin/vite --config apps/web/vite.config.ts --port ${web} --strictPort`, url: `http://127.0.0.1:${web}/`, reuseExistingServer: false, timeout: 60_000,
       env: { VITE_OIDC_AUTHORITY: `http://127.0.0.1:${idp}`, TIGERIS_API_URL: `http://127.0.0.1:${api}` } },
   ],

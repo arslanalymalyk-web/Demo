@@ -48,3 +48,4 @@ export function hashPayload(payload: unknown): string {
   return sha256Hex(canonicalJson(payload));
 }
 export * from "./paging.js";
+export * from "./egress-proxy.js";

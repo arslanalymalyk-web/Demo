@@ -1,5 +1,11 @@
 // Arabic wording, keyed by the English source text. It needs a native reviewer before release: see docs/handover/I18N.md.
 export const ar: Record<string, string> = {
+ "Emergency access": "الدخول الطارئ",
+ "For when the identity provider cannot be used. It needs a token made by two custodians, lasts a few hours and is reported to the administrators.": "لحالات تعذّر استخدام مزوّد الهوية. يحتاج إلى رمز يُصدره أمينان معًا، ويدوم ساعات قليلة، ويُبلَّغ به المسؤولون.",
+ "Emergency token": "رمز الطوارئ",
+ "Use emergency token": "استخدام رمز الطوارئ",
+ "That token was not accepted.": "لم يُقبل هذا الرمز.",
+ "You are signed in with emergency access. Everything you do is recorded and the administrators have been told.": "أنت مسجّل الدخول بصلاحية الطوارئ. كل ما تفعله مسجّل وقد أُبلغ المسؤولون.",
  "Showing {n} of {total}": "عرض {n} من {total}",
  "Loading…": "جارٍ التحميل…",
  "Load more": "عرض المزيد",

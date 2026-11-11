@@ -77,8 +77,10 @@ suite("ending sessions", () => {
 
   it("signs a person out of every device when they sign out", async () => {
     const s = await scene(), ana = await mint("ana");
+    await sleep(1100); // a token is dated to the second, so let this one be clearly older than the sign-out
     expect((await s.call(ana, "POST", "/v1/identity/me/sign-out", {})).status).toBe(200);
     expect((await s.call(ana, "GET", "/v1/identity/me")).status).toBe(401);
+    expect((await s.call(await mint("ana"), "GET", "/v1/identity/me")).status).toBe(200); // signing straight back in works
   });
 
   it("ends everyone's sessions in an emergency and records why", async () => {

@@ -33,6 +33,11 @@ Every setting is an environment variable. A variable marked **secret** may inste
 | `TIGERIS_AUDIT_CHECKPOINT_HOURS` | 24 | Hours between scheduled checkpoints (1 to 720). |
 | `TIGERIS_DOCUMENT_KEY` | none | Secret of at least 32 characters (also `TIGERIS_DOCUMENT_KEY_FILE`). When set, uploaded files and extracted page text are sealed (AES-256-GCM) before they reach the database, and search runs over keyed word tokens. Required in production when institution documents are enabled. Keep it away from the database administrator and back it up separately: without it, sealed documents cannot be read. |
 | `TIGERIS_DOCUMENT_KEY_PREVIOUS` | none | Comma-separated earlier keys, so documents sealed with them stay readable after the key is replaced. New documents use `TIGERIS_DOCUMENT_KEY`. |
+| `TIGERIS_BREAKGLASS_PUBLIC_KEY` | none | Public half (PEM, or the PEM base64-encoded) of the emergency sign-in key made by `pnpm identity break-glass init`. Not a secret. When set, an emergency token signed by two people holding the two private shares is accepted as a sign-in for a named administrator, for at most four hours; every use is audited and alerted. |
+| `TIGERIS_SMTP_PROXY` | `HTTPS_PROXY` | Egress proxy used for the mail relay (an `http://host:port` CONNECT proxy). Defaults to `HTTPS_PROXY`, unless the relay host is listed in `NO_PROXY`; `none` sends directly. |
+| `EGRESS_ALLOW` | none | For the egress proxy container only: the hosts the deployment may reach, as `host:port`, comma separated. Nothing is allowed by default. |
+| `EGRESS_PORT`, `EGRESS_HOST` | 3128, 0.0.0.0 | For the egress proxy only: where it listens inside the backend network. |
+| `EGRESS_ALLOW_PRIVATE` | none | For the egress proxy only: entries from `EGRESS_ALLOW` that are allowed to resolve to a private address (an identity provider or relay inside the institution). |
 | `OIDC_REQUIRE_MFA_CLAIM` | true | Tokens must carry a multi-factor claim (`amr` or `acr`). Turning it off in production also needs `TIGERIS_ALLOW_NO_MFA_CLAIM=true`, so it is a recorded decision. |
 | `TIGERIS_ALLOW_NO_MFA_CLAIM` | false | See above. |
 | `OIDC_CLIENT_ID` | `tigeris-web` | The web app's public client id (proxy and set-up). |

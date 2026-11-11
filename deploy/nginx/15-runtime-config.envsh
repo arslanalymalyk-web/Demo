@@ -1,5 +1,5 @@
 #!/bin/sh
-# Sourced by the nginx image entrypoint before it renders the templates (hence the 15- prefix and no executable bit),
+# Sourced by the nginx image entrypoint before it renders the templates, so the variables exported here reach the templates. The entrypoint only sources files named .envsh that are executable (the Dockerfile sets the mode),
 # so the variables exported here reach the templates. Writes the web app's runtime settings and fails fast on a missing one.
 set -eu
 : "${OIDC_AUTHORITY:?OIDC_AUTHORITY is required}" "${OIDC_CLIENT_ID:?OIDC_CLIENT_ID is required}" "${SERVER_NAME:?SERVER_NAME is required}"

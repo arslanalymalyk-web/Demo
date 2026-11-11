@@ -2,7 +2,7 @@
 
 _Confidential. Property of Tiger Capital AI. Prepared for the client's IT and security team._
 
-**Status:** the container images and compose file have not yet been built or started (no container daemon was available). Treat the first install as a verification run and report problems to Tiger Capital AI. See [VERIFICATION-REPORT.md](VERIFICATION-REPORT.md).
+**Status:** the web image has been built and run once. The application image has not been built and the compose stack has not been started. Treat the first install as a verification run: finish it with the acceptance run in [ACCEPTANCE.md](ACCEPTANCE.md) and report problems to Tiger Capital AI. See [VERIFICATION-REPORT.md](VERIFICATION-REPORT.md).
 
 ## Topology
 
@@ -65,11 +65,11 @@ Off by default. Set `TIGERIS_ALERTS_ENABLED=true`, `TIGERIS_SMTP_HOST`, `TIGERIS
 
 ## Malware scanner
 
-Start the scanner with `docker compose --profile scanner up -d` and set `TIGERIS_SCANNER=clamav` (host `clamav`, port 3310 by default). The ClamAV container sits on the internal network and on the egress network so it can refresh signatures; restrict that egress to the ClamAV signature hosts and pin the image by digest. It is required before institution documents are enabled: configuration refuses client-data mode without it and start-up refuses to run if it does not answer. Not yet built or started in this build.
+Start the scanner with `docker compose --profile scanner up -d` and set `TIGERIS_SCANNER=clamav` (host `clamav`, port 3310 by default). The ClamAV container sits on the internal network and on the egress network so it can refresh signatures; restrict that egress to the ClamAV signature hosts with the host firewall (the image is pinned by digest). It is required before institution documents are enabled: configuration refuses client-data mode without it and start-up refuses to run if it does not answer. Not yet built or started in this build.
 
 ## Optional: scheduled ingestion
 
-Off by default. Set `TIGERIS_SCHEDULER_ENABLED=true`, add the egress network to the API service in the compose file, and allow exactly the source hosts on the network allowlist (the sources are listed on the Data and Sources screen; each connector reaches only its own source). Then two administrators activate a schedule under Settings, Ingestion schedule. With the scheduler on and no schedule active, nothing is fetched. The scheduler appears on `/metrics` as `tigeris_scheduler_enabled`. If the client prefers the API never to have outbound access, leave it off and use the separate ingest service or an external scheduler running the ingest command.
+Off by default. Set `TIGERIS_SCHEDULER_ENABLED=true`, and add exactly the source hosts (as `host:443`) to `EGRESS_ALLOW` (the sources are listed on the Data and Sources screen; each connector reaches only its own source). The API has no other route out: everything goes through the egress proxy. Then two administrators activate a schedule under Settings, Ingestion schedule. With the scheduler on and no schedule active, nothing is fetched. The scheduler appears on `/metrics` as `tigeris_scheduler_enabled`. If the client prefers the API never to have outbound access, leave it off and use the separate ingest service or an external scheduler running the ingest command.
 
 ## Optional: connecting a model
 

@@ -1,0 +1,17 @@
+# Optional: the institution-held keys, as mounted secrets. Create the files in ./secrets first (see secrets/README.md), then:
+#   docker compose -f docker-compose.yml -f docker-compose.keys.yml up -d
+# TIGERIS_DOCUMENT_KEY seals uploaded documents (needed before institution documents are enabled); TIGERIS_AUDIT_ANCHOR_KEY signs audit checkpoints.
+# Checkpoints are saved to AUDIT_CHECKPOINT_HOST_DIR, which should be a write-once or remote mount the database administrator cannot change.
+secrets:
+  document_key: { file: ./secrets/document_key }
+  audit_anchor_key: { file: ./secrets/audit_anchor_key }
+
+services:
+  app:
+    environment:
+      TIGERIS_DOCUMENT_KEY_FILE: /run/secrets/document_key
+      TIGERIS_AUDIT_ANCHOR_KEY_FILE: /run/secrets/audit_anchor_key
+      TIGERIS_AUDIT_CHECKPOINT_DIR: /checkpoints
+      TIGERIS_AUDIT_CHECKPOINT_HOURS: ${TIGERIS_AUDIT_CHECKPOINT_HOURS:-24}
+    secrets: [db_app_url, metrics_token, document_key, audit_anchor_key]
+    volumes: ["${AUDIT_CHECKPOINT_HOST_DIR:?set AUDIT_CHECKPOINT_HOST_DIR}:/checkpoints"]

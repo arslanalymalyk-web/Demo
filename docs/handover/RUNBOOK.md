@@ -81,7 +81,7 @@ The Documents screen shows the scanner status, files waiting for a scan, and any
 
 ## Assistant and model calls
 
-If drafts fail with "the model could not be reached", check the egress network, the allowlist and the key. Verification failures ("Failed verification") are expected sometimes and are not faults: the draft is discarded and the call is logged. Auditors read the call log in the Assistant screen. Per-person limit is 30 drafts an hour. To turn the Assistant off, set the provider to `off` and restart the API.
+If drafts fail with "the model could not be reached", check that the model host is in `EGRESS_ALLOW` (the egress proxy log shows refused hosts), and the key. Verification failures ("Failed verification") are expected sometimes and are not faults: the draft is discarded and the call is logged. Auditors read the call log in the Assistant screen. Per-person limit is 30 drafts an hour. To turn the Assistant off, set the provider to `off` and restart the API.
 
 ## Retention
 
@@ -90,6 +90,22 @@ Nothing is deleted automatically. Use the Retention screen for the ten-year repo
 ## Document key
 
 When institution documents are on, set `TIGERIS_DOCUMENT_KEY` (from the secret store, at least 32 characters) before the first upload and back it up somewhere the database backup is not. Without it sealed documents cannot be read, and the Readiness screen fails. To replace the key, put the new one in `TIGERIS_DOCUMENT_KEY` and the old one in `TIGERIS_DOCUMENT_KEY_PREVIOUS`; keep old keys as long as the documents they sealed exist.
+
+## Emergency sign-in (break-glass)
+
+For when the identity provider cannot be used. Set up once, before it is needed: on an offline machine run `pnpm identity break-glass init --out <new folder>`, give `share-1.txt` and `share-2.txt` to two different custodians (neither an administrator who would use the route alone, never a supplier), delete them from the machine, and put `public-key.pem` (or its base64) in `TIGERIS_BREAKGLASS_PUBLIC_KEY`. In an emergency both custodians come together: `pnpm identity break-glass issue --share-1 <file> --share-2 <file> --subject <administrator's identity-provider subject> --minutes 60 --reason "why"`. The token is pasted into "Emergency access" on the sign-in screen. It lasts at most four hours, is shown on every screen as emergency access, is recorded with the reason, and alerts the administrators and auditors. Rehearse it once a year (acceptance item `break-glass`).
+
+## Egress and the proxy
+
+All outbound connections leave through the `egress-proxy` container and only to the host:port pairs in `EGRESS_ALLOW`. If a feature fails with "could not be reached", read the proxy's log: a refused line names the host and the reason ("not on the allowlist", "resolves to a private address"). Add exactly what is needed (an internal host also goes in `EGRESS_ALLOW_PRIVATE`) and restart the proxy; never add a wildcard (the proxy does not accept one). Check the boundary after any change to the network: `docker compose exec app node scripts/egress-check.mjs`. In an incident whose cause is unknown, `docker compose stop egress-proxy` cuts every outbound connection at once; start it again afterwards. Load `deploy/egress/nftables.conf` on the host as the second layer.
+
+## Temporary and supplier access
+
+Create the person with "Access ends" set; see [VENDOR-ACCESS.md](VENDOR-ACCESS.md). After the engagement, an auditor reads the person's activity and files the review.
+
+## Releases
+
+A release is a signed manifest: `node scripts/release.mjs --key <signing key> --out <folder> --image app=sha256:... --image web=sha256:...` (it refuses an unpinned image or a tree with uncommitted changes). Recipients check it with the signer's public key: `node scripts/verify-release.mjs --public-key <file> --manifest <file> --root <unpacked release>`. After installing, run the acceptance script ([ACCEPTANCE.md](ACCEPTANCE.md)).
 
 ## Ending access and stopping the system
 

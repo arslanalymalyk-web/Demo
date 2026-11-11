@@ -8,7 +8,7 @@ TIGERIS AI OS is an institution-owned, model-agnostic intelligence system where 
 |---|---|---|
 | **An executive or investor** | [EXECUTIVE-SUMMARY.md](EXECUTIVE-SUMMARY.md) | [VERIFICATION-REPORT.md](VERIFICATION-REPORT.md), [OPEN-ITEMS.md](OPEN-ITEMS.md) |
 | **A Tiger Capital AI engineer** | [ARCHITECTURE.md](ARCHITECTURE.md) | [ENGINEERING.md](ENGINEERING.md), `docs/adr/`, `docs/decisions/` |
-| **The client's IT or security team** | [DEPLOYMENT.md](DEPLOYMENT.md) | [SECURITY.md](SECURITY.md), [DATA-FLOWS.md](DATA-FLOWS.md), [CONTROL-MATRIX.md](CONTROL-MATRIX.md), [SOVEREIGNTY.md](SOVEREIGNTY.md), [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md) |
+| **The client's IT or security team** | [DEPLOYMENT.md](DEPLOYMENT.md) | [SECURITY.md](SECURITY.md), [DATA-FLOWS.md](DATA-FLOWS.md), [CONTROL-MATRIX.md](CONTROL-MATRIX.md), [SOVEREIGNTY.md](SOVEREIGNTY.md), [ACCEPTANCE.md](ACCEPTANCE.md), [VENDOR-ACCESS.md](VENDOR-ACCESS.md), [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md) |
 | **An operator who runs it daily** | [RUNBOOK.md](RUNBOOK.md) | [BACKUP-RESTORE.md](BACKUP-RESTORE.md) |
 | **A reviewer of the Arabic wording** | [I18N.md](I18N.md) | `apps/web/src/i18n-ar.ts` |
 
@@ -19,10 +19,10 @@ TIGERIS AI OS is an institution-owned, model-agnostic intelligence system where 
 | `apps/api` | The HTTP API (Fastify). Every route has an access rule. |
 | `apps/web` | The web interface (React, Vite). Ivory design, navy theme, right-to-left layout. |
 | `packages/*` | The modules: `core`, `connectors`, `ingest`, `graph`, `scenario`, `identity`, `cases`, `governance`, `documents`, `sectors`, `settings`, `retention`, `reasoning`, `scheduler`, `setup`, `alerts` |
-| `db/migrations` | Twenty-one numbered SQL migrations, run by the owner role only |
+| `db/migrations` | Twenty-two numbered SQL migrations, run by the owner role only |
 | `deploy/` | Container, proxy, database and backup files |
 | `docs/adr`, `docs/decisions` | Twenty-six architecture decision records and the 200-answer decision log with its resolutions |
-| `tests/`, `e2e/` | 355 unit and integration tests (one needs a real ClamAV daemon and is skipped without one) and 37 browser tests |
+| `tests/`, `e2e/` | 392 unit and integration tests (one needs a real ClamAV daemon and is skipped without one) and 39 browser tests |
 | `scripts/` | Database bootstrap, SBOM and licence check, offline bundle, geography build |
 
 ## Rules that bind everyone (from `CLAUDE.md`)

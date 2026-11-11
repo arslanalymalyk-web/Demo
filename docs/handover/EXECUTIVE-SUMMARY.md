@@ -16,11 +16,11 @@ TIGERIS AI OS is an intelligence system owned by the institution that runs it. E
 
 ## What is proved
 
-355 automated tests pass against a real database, and 37 browser tests walk every screen against the real API. A disaster-recovery drill, a proxy and browser test, an offline install and a dependency audit (zero known vulnerabilities) were run for real. See [VERIFICATION-REPORT.md](VERIFICATION-REPORT.md).
+392 automated tests pass against a real database, and 39 browser tests walk every screen against the real API. A disaster-recovery drill, a proxy and browser test, an offline install and a dependency audit (zero known vulnerabilities) were run for real. See [VERIFICATION-REPORT.md](VERIFICATION-REPORT.md).
 
 ## What is not proved
 
-The container images were never built and the CI workflow has never run, because the build host had no container daemon. No real identity provider has been tested. There has been no independent penetration test, no test of the malware scanner with its real signature database, and no measurement of Arabic OCR accuracy. Client data has never been connected. The full list is in the second half of the verification report.
+The web image has been built and run, but the application image has not been built (its package mirror was not reachable from the build environment), the compose stack has not been started, and the CI workflows have never run. No real identity provider has been tested. There has been no independent penetration test, no test of the malware scanner with its real signature database, and no measurement of Arabic OCR accuracy. Client data has never been connected. The full list is in the second half of the verification report.
 
 ## What the client's data policy is
 

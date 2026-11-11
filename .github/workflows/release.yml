@@ -1,0 +1,35 @@
+name: release
+# Manual: builds the images, records what went into them, and signs a release manifest.
+# Needs the repository secret RELEASE_SIGNING_KEY (the private key made by `node scripts/release.mjs keygen`) and, to sign the images too, COSIGN_PRIVATE_KEY and COSIGN_PASSWORD.
+# This workflow has not been run: see docs/handover/VERIFICATION-REPORT.md.
+on: workflow_dispatch
+permissions: { contents: read }
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint:secrets
+      - name: Build the images
+        run: |
+          docker build --target app -t tigeris-app:release .
+          docker build --target web -t tigeris-web:release .
+          docker build -t tigeris-db:release deploy/db
+      - name: Record the operating-system packages in each image
+        run: |
+          docker run --rm --entrypoint sh tigeris-app:release -c "dpkg-query -W -f='\${Package} \${Version}\n' | sort" > docs/handover/sbom/image-app-os-packages.txt
+          docker run --rm --entrypoint sh tigeris-web:release -c 'apk info -v | sort' > docs/handover/sbom/image-web-os-packages.txt
+      - name: Sign the release manifest
+        env: { RELEASE_SIGNING_KEY: "${{ secrets.RELEASE_SIGNING_KEY }}" }
+        run: |
+          umask 077; printf '%s' "$RELEASE_SIGNING_KEY" > "$RUNNER_TEMP/release.key"
+          node scripts/release.mjs --allow-dirty --key "$RUNNER_TEMP/release.key" --out release \
+            --image app="$(docker image inspect tigeris-app:release --format '{{.Id}}')" \
+            --image web="$(docker image inspect tigeris-web:release --format '{{.Id}}')"
+          rm -f "$RUNNER_TEMP/release.key"
+      - uses: actions/upload-artifact@v4
+        with: { name: signed-release, path: "release/\ndocs/handover/sbom/" }

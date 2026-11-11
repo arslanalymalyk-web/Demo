@@ -71,7 +71,7 @@ export function Admin({ can }: { can: (p: string) => boolean }): ReactNode {
   const list = useApi<PrincipalRow[]>("/v1/identity/principals");
   const manage = can("identity.manage");
   const [err, setErr] = useState<string | null>(null), [msg, setMsg] = useState<string | null>(null);
-  const [form, setForm] = useState({ issuer: "", subject: "", displayName: "", roles: [] as string[] });
+  const [form, setForm] = useState({ issuer: "", subject: "", displayName: "", roles: [] as string[], expiresAt: "" });
   const requests = useApi<GrantRow[]>(manage ? "/v1/identity/role-requests" : null);
   const held = (r: unknown) => { const g = (r as { pendingGrant?: { roles: string[] } | null } | null)?.pendingGrant; return g ? ` ${g.roles.join(" and ")} is held until a second administrator approves it.` : ""; };
   const act = async (f: () => Promise<unknown>, ok: string | ((r: unknown) => string)) => { setErr(null); setMsg(null); try { const r = await f(); setMsg(typeof ok === "function" ? ok(r) : ok); list.reload(); requests.reload(); } catch (e) { setErr(e instanceof ApiError ? e.message : "The change failed."); } };
@@ -84,7 +84,7 @@ export function Admin({ can }: { can: (p: string) => boolean }): ReactNode {
           <Table label="Principals"><thead><tr><th>Person</th><th>Identity provider subject</th><th>Roles</th><th>State</th>{manage ? <th>Actions</th> : null}</tr></thead>
             <tbody>{rows.map(p => <tr key={p.id}><td>{p.displayName ?? "—"}</td><td className="mono">{p.subject}<div className="small muted">{p.issuer}</div></td>
               <td>{manage ? <fieldset style={{ border: 0, padding: 0, margin: 0 }}><legend className="sr-only">Roles for {p.subject}</legend>{ROLES.map(r => <label key={r} style={{ flexDirection: "row", alignItems: "center", marginInlineEnd: 10 }}><input type="checkbox" checked={p.roles.includes(r)} onChange={e => act(() => api(`/v1/identity/principals/${p.id}/roles`, { method: "PUT", body: { roles: e.target.checked ? [...p.roles, r] : p.roles.filter(x => x !== r) } }), r => `Roles updated.${held(r)}`)} />{r}</label>)}</fieldset> : p.roles.join(", ") || "none"}</td>
-              <td>{p.disabled ? <span className="badge b-bad">Disabled</span> : <span className="badge b-ok">Active</span>}</td>
+              <td>{p.disabled ? <span className="badge b-bad">Disabled</span> : p.expiresAt && new Date(p.expiresAt) <= new Date() ? <span className="badge b-bad">Expired</span> : <span className="badge b-ok">Active</span>}{p.expiresAt ? <div className="small muted">Access ends {dateTime(p.expiresAt)}</div> : null}</td>
               {manage ? <td><button onClick={() => act(() => api(`/v1/identity/principals/${p.id}/${p.disabled ? "enable" : "disable"}`, { method: "POST" }), p.disabled ? "Enabled." : "Disabled.")}>{p.disabled ? "Enable" : "Disable"}</button> <button onClick={() => { const why = window.prompt(`Why are you ending ${p.displayName ?? p.subject}'s sessions?`); if (why && why.trim().length >= 5) void act(() => api(`/v1/identity/principals/${p.id}/revoke-sessions`, { method: "POST", body: { reason: why } }), "Sessions ended. They must sign in again."); }}>End sessions</button></td> : null}</tr>)}</tbody></Table>
         )}</Async>
       </Card>
@@ -99,9 +99,10 @@ export function Admin({ can }: { can: (p: string) => boolean }): ReactNode {
       {manage ? <Lockdown /> : null}
       {manage ? (
         <div style={{ marginTop: 16 }}><Card title="Add a person">
-          <form className="row" onSubmit={e => { e.preventDefault(); void act(async () => { const r = await api("/v1/identity/principals", { method: "POST", body: { issuer: form.issuer, subject: form.subject, displayName: form.displayName || null, roles: form.roles } }); setForm({ issuer: form.issuer, subject: "", displayName: "", roles: [] }); return r; }, r => `Person added.${held(r)}`); }}>
+          <form className="row" onSubmit={e => { e.preventDefault(); void act(async () => { const r = await api("/v1/identity/principals", { method: "POST", body: { issuer: form.issuer, subject: form.subject, displayName: form.displayName || null, roles: form.roles, ...(form.expiresAt ? { expiresAt: new Date(form.expiresAt).toISOString() } : {}) } }); setForm({ issuer: form.issuer, subject: "", displayName: "", roles: [], expiresAt: "" }); return r; }, r => `Person added.${held(r)}`); }}>
             <label>Issuer<input required value={form.issuer} onChange={e => setForm({ ...form, issuer: e.target.value })} placeholder="https://idp.institution.example" /></label>
             <label>Subject<input required value={form.subject} onChange={e => setForm({ ...form, subject: e.target.value })} /></label>
+            <label>Access ends (optional)<input type="datetime-local" value={form.expiresAt} onChange={e => setForm({ ...form, expiresAt: e.target.value })} /></label>
             <label>Display name<input value={form.displayName} onChange={e => setForm({ ...form, displayName: e.target.value })} /></label>
             <fieldset style={{ border: 0, padding: 0 }}><legend className="small muted">Roles</legend>{ROLES.map(r => <label key={r} style={{ flexDirection: "row", alignItems: "center", marginInlineEnd: 10 }}><input type="checkbox" checked={form.roles.includes(r)} onChange={e => setForm({ ...form, roles: e.target.checked ? [...form.roles, r] : form.roles.filter(x => x !== r) })} />{r}</label>)}</fieldset>
             <button className="primary" disabled={form.roles.length === 0}>Add</button>

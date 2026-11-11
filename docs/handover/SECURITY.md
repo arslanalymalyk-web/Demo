@@ -8,6 +8,10 @@ _Confidential. Property of Tiger Capital AI. Prepared for Tiger Capital AI and t
 |---|---|
 | Stolen or forged token | Signature, issuer, audience, expiry and multi-factor claim checks; unsigned and symmetric-key tokens refused; token held in browser memory only; maximum token age; sessions can be ended per person or for everyone; sign-out ends all of a person's sessions |
 | Database administrator rewrites history | Append-only triggers and the hash chain catch edits; a rewrite of the whole chain is caught only by a signed checkpoint kept off the server (see SOVEREIGNTY.md gap C) |
+| A compromised API tries to send data out | No route out except the egress proxy: an allowlist of host:port, TLS tunnels only, no private addresses, every decision logged; a host firewall file as a second layer; `scripts/egress-check.mjs` shows the boundary from inside |
+| Identity provider unavailable or compromised | Break-glass sign-in: an offline key split in two shares for two custodians, four hours at most, administrators only, audited and alerted on every use |
+| Supplier or support staff over-reach | No standing access; accounts with an expiry the API enforces; an activity report for review (VENDOR-ACCESS.md) |
+| Tampered release | Base images pinned by digest; signed release manifest verified with the signer's public key; secret scan in CI |
 | Suspected breach, cause unknown | Emergency stop (lockdown) refuses ordinary use while administrators and auditors investigate |
 | Unprovisioned or over-privileged user | Provisioned principals only; seven roles; default-deny route access map; separation of duty for decisions, settings and policy |
 | Cross-institution data exposure | Forced row-level security on every institution table; runtime role owns nothing and has no BYPASSRLS; start-up check; one deployment per institution |
@@ -20,7 +24,7 @@ _Confidential. Property of Tiger Capital AI. Prepared for Tiger Capital AI and t
 | Backup theft | Backups and log archive encrypted (AES-256, key from the client's secret store); SHA-256 manifests; tampered backups refused |
 | Model produces false or injected content | Output is JSON verified by code: cited facts must exist, every number must appear in them, advice, links and markup are refused; any failure rejects the whole draft; the model has no database access; drafts are never records |
 | Data leaves to a model vendor | Off by default; data-class gate (public record, sample, scenario only); case text never sent; https, no redirects, key from the secret store; every call logged with prompt hash |
-| Scheduler widens egress | Off by default; the API stays on an internal network until the client adds the egress network and allowlists exact source hosts; only approved sources with a registered connector can be scheduled; the schedule is a two-person governed setting; requests are rate limited and honour robots rules; runs are time limited and every transition is audited |
+| Scheduler widens egress | Off by default; the API has no route out except the egress proxy, which allows only the host:port pairs in `EGRESS_ALLOW`, refuses plain HTTP and refuses names that resolve to private addresses unless listed as private; only approved sources with a registered connector can be scheduled; the schedule is a two-person governed setting; requests are rate limited and honour robots rules; runs are time limited and every transition is audited |
 | Alerts leak data or can be abused | Notices are fixed text with a category, a plain reference code and an application link only; rendering refuses anything else; a test checks no digits outside the link and reference; TLS to the relay is verified and production refuses an unencrypted relay; addresses are checked by the database for line breaks (header injection) and by the mailer; one recipient per message; hourly cap; every attempt logged by person, not address |
 | Supply chain | Pinned dependencies, zero known vulnerabilities at last audit, licence allowlist, SBOM, offline bundle, CI audit |
 
@@ -34,7 +38,7 @@ Prompt injection in a stored fact cannot cause an action, because the model can 
 
 ## Known gaps
 
-These are the same gaps as the second half of [VERIFICATION-REPORT.md](VERIFICATION-REPORT.md): images never built; CI never run; no real identity provider; no independent penetration test; malware scanning proved only with a test signature; Arabic OCR unmeasured; no high availability; backup scripts proved on the Debian layout only; no operating-system package inventory; Tiger's values not validated for truth; approximate facility positions; client data never connected.
+These are the same gaps as the second half of [VERIFICATION-REPORT.md](VERIFICATION-REPORT.md): the application image never built and the compose stack never started (the web image was built and run); CI never run; no real identity provider; no independent penetration test; malware scanning proved only with a test signature; Arabic OCR unmeasured; no high availability; backup scripts proved on the Debian layout only; no operating-system package inventory; Tiger's values not validated for truth; approximate facility positions; client data never connected.
 
 ## Before client data
 

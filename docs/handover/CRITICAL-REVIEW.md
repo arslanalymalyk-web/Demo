@@ -10,7 +10,7 @@ An honest look at the build as it stands: what is strong, what this review found
 - **Numbers are computed by code and verified.** Deterministic scenario engine with exact replay; the model assistant can only return cited text whose every number is checked against stored facts, rejected whole on any failure; notices by email carry no figures.
 - **Two-person control** on settings, policy and the ingestion schedule; separation of duty for decisions.
 - **Failure is designed for.** Fail-closed malware scanning, back-off and auto-pause for sources, retry and give-up for alerts, a restore drill proved on a real cluster, an error boundary on every screen.
-- **Tested end to end.** 355 unit and integration tests against a real database and 37 browser tests against the real API, including Arabic and right-to-left at phone width.
+- **Tested end to end.** 392 unit and integration tests against a real database and 39 browser tests against the real API, including Arabic and right-to-left at phone width.
 - **Honest documentation.** Every handover document says what was not verified; the verification report lists 19 numbered gaps.
 
 ## Found and fixed in this review

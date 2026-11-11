@@ -5,7 +5,7 @@ export interface Mailer { transport: "smtp" | "log"; send(m: Mail): Promise<{ me
 /** What went wrong, in words that never repeat a server reply, an address or a credential. */
 export class MailError extends Error { constructor(message: string, readonly transient: boolean) { super(message); } }
 
-export interface SmtpConfig { transport: "smtp" | "log"; host: string; port: number; security: "starttls" | "tls" | "none"; user?: string | null; password?: string | null; from: string; production: boolean; timeoutMs?: number }
+export interface SmtpConfig { transport: "smtp" | "log"; host: string; port: number; security: "starttls" | "tls" | "none"; user?: string | null; password?: string | null; from: string; production: boolean; timeoutMs?: number; proxy?: string | null }
 
 function explain(e: unknown): MailError {
   const x = e as { code?: string; responseCode?: number };
@@ -23,6 +23,7 @@ export function createMailer(cfg: SmtpConfig): Mailer {
     ? nodemailer.createTransport({ jsonTransport: true })
     : nodemailer.createTransport({
       host: cfg.host, port: cfg.port, secure: cfg.security === "tls", requireTLS: cfg.security === "starttls", ignoreTLS: cfg.security === "none",
+      ...(cfg.proxy ? { proxy: cfg.proxy } : {}),
       ...(cfg.user ? { auth: { user: cfg.user, pass: cfg.password ?? "" } } : {}), connectionTimeout: cfg.timeoutMs ?? 10_000, greetingTimeout: cfg.timeoutMs ?? 10_000, socketTimeout: cfg.timeoutMs ?? 20_000,
       tls: { minVersion: "TLSv1.2", rejectUnauthorized: true },
     });

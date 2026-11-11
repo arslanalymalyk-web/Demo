@@ -1,6 +1,6 @@
 import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from "jose";
 
-export interface Claims { issuer: string; subject: string; name: string | null; mfa: boolean; issuedAt: number | null }
+export interface Claims { issuer: string; subject: string; name: string | null; mfa: boolean; issuedAt: number | null; breakGlass?: { jti: string; reason: string } }
 export type TokenVerifier = (token: string) => Promise<Claims>;
 export class AuthError extends Error {}
 

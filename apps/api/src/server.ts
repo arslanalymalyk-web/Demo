@@ -7,7 +7,7 @@ import type pg from "pg";
 import { z } from "zod";
 import { PostgresGraph } from "../../../packages/graph/src/index.js";
 import { EPISODE, PACKS, TEMPLATES, createRun, episodeBacktestIfStored, getRun, listRuns, listRunsPage, replayRun } from "../../../packages/scenario/src/index.js";
-import { AuthError, IdentityError, PRIVILEGED_ROLES, changeRoles, decideGrantRequest, findPrincipal, listGrantRequests, requestForNewPerson, listPrincipals, permissionsOf, getLockdown, provisionPrincipal, revokeSessions, setDisabled, setLockdown, setRoles, type Permission, type Principal, type TokenVerifier } from "../../../packages/identity/src/index.js";
+import { AuthError, IdentityError, PRIVILEGED_ROLES, changeRoles, decideGrantRequest, findPrincipal, listGrantRequests, requestForNewPerson, listPrincipals, permissionsOf, getLockdown, provisionPrincipal, revokeSessions, setDisabled, setExpiry, setLockdown, setRoles, type Permission, type Principal, type TokenVerifier } from "../../../packages/identity/src/index.js";
 import { audit } from "../../../packages/ingest/src/store.js";
 import { PagingError, keysetPage, likePattern, type Page } from "../../../packages/core/src/index.js";
 import { CaseError, addEvidence, addParticipant, addRecommendation, openCaseFromSignal, addScenario, closeCase, createCase, decide, getCase, listCases, listCasesPage, listHandoffsPage, searchMemoryPage, startAnalysis, submitForReview, updateHandoff } from "../../../packages/cases/src/index.js";
@@ -40,7 +40,7 @@ const decisionBody = z.object({ recommendationId: z.string().uuid(), decision: z
 const closeBody = z.object({ rationale: z.string().min(1).max(4000), outcome: z.string().max(4000).optional() });
 const handoffBody = z.object({ status: z.enum(["done", "cancelled"]), outcome: z.string().min(1).max(4000) });
 const policyBody = z.object({ rules: z.unknown(), authority: z.unknown() });
-const principalBody = z.object({ issuer: z.string().min(1).max(500), subject: z.string().min(1).max(500), displayName: z.string().max(200).nullish(), roles: z.array(z.string()).max(7) });
+const principalBody = z.object({ issuer: z.string().min(1).max(500), subject: z.string().min(1).max(500), displayName: z.string().max(200).nullish(), roles: z.array(z.string()).max(7), expiresAt: z.string().datetime().nullish() });
 const rolesBody = z.object({ roles: z.array(z.string()).max(7) });
 
 /** The routes that still answer during a lockdown: finding out what happened, ending sessions and people's access, and switching the lockdown off. Everything else is refused, including model calls, uploads and scheduled fetches. */
@@ -59,6 +59,8 @@ const ACCESS: Record<string, Permission | null | "public"> = {
   "POST /v1/identity/role-requests/:id/:verb": "identity.manage",
   "POST /v1/identity/principals/:id/disable": "identity.manage",
   "POST /v1/identity/principals/:id/revoke-sessions": "identity.manage",
+  "PUT /v1/identity/principals/:id/expiry": "identity.manage",
+  "GET /v1/identity/principals/:id/activity": "audit.verify",
   "POST /v1/identity/revoke-all-sessions": "identity.manage",
   "POST /v1/identity/me/sign-out": null,
   "GET /v1/lockdown": "identity.read",
@@ -134,7 +136,7 @@ const ACCESS: Record<string, Permission | null | "public"> = {
   "POST /v1/policies": "policy.manage",
   "POST /v1/policies/:id/activate": "policy.manage",
 };
-declare module "fastify" { interface FastifyRequest { principal?: Principal } }
+declare module "fastify" { interface FastifyRequest { principal?: Principal; emergency?: boolean } }
 
 /**
  * The institution is fixed by deployment configuration (one deployment per institution).
@@ -209,6 +211,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   app.addHook("onRoute", r => { for (const m of [r.method].flat()) if (m !== "HEAD") declared.push(`${m} ${r.url}`); });
   app.addHook("onReady", async () => { const missing = declared.filter(k => !(k in ACCESS) && !k.includes("/documentation")); if (missing.length) throw new Error(`routes without an access rule: ${missing.join(", ")}`); });
 
+  const seenBreakGlass = new Set<string>();
   app.addHook("onRequest", async (req, reply) => {
     const route = req.routeOptions.url;
     if (!route) return; // unmatched paths fall through to the 404 handler and expose nothing
@@ -224,10 +227,19 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
     if (!principal) return reply.code(403).send({ error: "not_provisioned", message: "no principal for this identity in this institution" });
     const deny = async (reason: string) => { authFailures.inc({ reason: "forbidden" }); await tenant(c => audit(c, opts.institutionId, { actorType: "principal", actorId: principal.id, action: "identity.denied", objectType: "route", objectId: `${req.method} ${route}`, payload: { reason } })); return reply.code(403).send({ error: "forbidden", message: reason }); };
     if (principal.disabled) return deny("principal disabled");
+    if (principal.expiresAt && principal.expiresAt.getTime() <= Date.now()) return deny("access has expired");
+    if (claims.breakGlass) {
+      if (!principal.roles.includes("administrator")) return deny("emergency access is for administrators");
+      if (!seenBreakGlass.has(claims.breakGlass.jti)) {
+        seenBreakGlass.add(claims.breakGlass.jti);
+        await tenant(async c => { if (!(await c.query("SELECT 1 FROM audit_events WHERE action = 'identity.break_glass_used' AND payload->>'jti' = $1 LIMIT 1", [claims.breakGlass!.jti])).rowCount) await audit(c, opts.institutionId, { actorType: "principal", actorId: principal.id, action: "identity.break_glass_used", objectType: "principal", objectId: principal.id, payload: { jti: claims.breakGlass!.jti, reason: claims.breakGlass!.reason, route: `${req.method} ${route}` } }); });
+      }
+      reply.header("x-emergency-access", "1");
+    }
     if (principal.sessionsValidAfter && (claims.issuedAt === null || claims.issuedAt * 1000 < principal.sessionsValidAfter.getTime())) return unauthorized("this session was ended; sign in again");
     if (need !== null && !permissionsOf(principal.roles).has(need)) return deny(`missing permission ${need}`);
     if (!LOCKDOWN_OK.has(`${req.method} ${route}`) && (await tenant(c => getLockdown(c))).locked) { authFailures.inc({ reason: "forbidden" }); return reply.code(423).send({ error: "locked_down", message: "the institution is in lockdown; only administrators and auditors can use the investigation and release routes" }); }
-    req.principal = principal;
+    req.principal = principal; req.emergency = Boolean(claims.breakGlass);
   });
 
   app.get("/health", async () => ({ status: "ok" }));
@@ -243,7 +255,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
 
   app.get("/v1/identity/me", async req => {
     const inst = await tenant(async c => (await c.query("SELECT id, name, jurisdiction FROM institutions WHERE id = $1", [opts.institutionId])).rows[0]);
-    return { ...req.principal!, permissions: [...permissionsOf(req.principal!.roles)].sort(), institution: inst ? { id: inst.id, name: inst.name, jurisdiction: inst.jurisdiction ?? null } : null };
+    return { ...req.principal!, emergencyAccess: req.emergency === true, permissions: [...permissionsOf(req.principal!.roles)].sort(), institution: inst ? { id: inst.id, name: inst.name, jurisdiction: inst.jurisdiction ?? null } : null };
   });
   app.get("/v1/identity/principals", async () => tenant(c => listPrincipals(c)));
   const identityCall = async <T>(reply: { code: (n: number) => { send: (b: unknown) => unknown } }, fn: (c: pg.PoolClient) => Promise<T>) => {
@@ -257,7 +269,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
     if (!b.success) return reply.code(400).send({ error: "invalid_body", details: b.error.flatten() });
     const actor = { type: "principal", id: req.principal!.id }, privileged = b.data.roles.filter(x => (PRIVILEGED_ROLES as readonly string[]).includes(x));
     const r = await identityCall(reply, async c => {
-      const p = await provisionPrincipal(c, opts.institutionId, actor, { ...b.data, roles: b.data.roles.filter(x => !privileged.includes(x)), displayName: b.data.displayName ?? null });
+      const p = await provisionPrincipal(c, opts.institutionId, actor, { ...b.data, roles: b.data.roles.filter(x => !privileged.includes(x)), displayName: b.data.displayName ?? null, expiresAt: b.data.expiresAt ? new Date(b.data.expiresAt) : null });
       return { ...p, pendingGrant: await requestForNewPerson(c, opts.institutionId, actor, p.id, privileged) };
     });
     return r && "id" in (r as object) ? reply.code(201).send(r) : r;
@@ -272,6 +284,17 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
     const p = req.params as { id: string; verb: string }, id = uuid.safeParse(p.id), b = z.object({ note: z.string().trim().max(300).optional() }).safeParse(req.body ?? {});
     if (!id.success || !b.success || !["approve", "reject"].includes(p.verb)) return reply.code(400).send({ error: "invalid_request" });
     return identityCall(reply, c => decideGrantRequest(c, opts.institutionId, { type: "principal", id: req.principal!.id }, id.data, p.verb === "approve", b.data.note ?? null));
+  });
+  app.put("/v1/identity/principals/:id/expiry", async (req, reply) => {
+    const id = uuid.safeParse((req.params as { id: string }).id), b = z.object({ expiresAt: z.string().datetime().nullable(), reason: z.string().trim().min(5).max(300) }).safeParse(req.body);
+    if (!id.success || !b.success) return reply.code(400).send({ error: "invalid_request" });
+    return identityCall(reply, c => setExpiry(c, opts.institutionId, { type: "principal", id: req.principal!.id }, id.data, b.data.expiresAt ? new Date(b.data.expiresAt) : null, b.data.reason));
+  });
+  // What one person did, for reviewing temporary or vendor access afterwards: the audit events they caused, newest first.
+  app.get("/v1/identity/principals/:id/activity", async (req, reply) => {
+    const id = uuid.safeParse((req.params as { id: string }).id);
+    if (!id.success) return reply.code(400).send({ error: "invalid_id" });
+    return tenant(async c => (await c.query("SELECT seq, occurred_at, action, object_type, object_id, payload FROM audit_events WHERE actor_id = $1 ORDER BY seq DESC LIMIT 500", [id.data])).rows);
   });
   const why = z.object({ reason: z.string().trim().min(5).max(300) });
   app.get("/v1/lockdown", async () => tenant(c => getLockdown(c)));
@@ -291,7 +314,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
     if (!b.success) return reply.code(400).send({ error: "invalid_request" });
     return identityCall(reply, async c => ({ revoked: await revokeSessions(c, opts.institutionId, { type: "principal", id: req.principal!.id }, null, b.data.reason) }));
   });
-  app.post("/v1/identity/me/sign-out", async req => tenant(async c => ({ revoked: await revokeSessions(c, opts.institutionId, { type: "principal", id: req.principal!.id }, req.principal!.id, "signed out by the person") })));
+  app.post("/v1/identity/me/sign-out", async req => tenant(async c => ({ revoked: await revokeSessions(c, opts.institutionId, { type: "principal", id: req.principal!.id }, req.principal!.id, "signed out by the person", true) })));
   for (const [verb, disabled] of [["disable", true], ["enable", false]] as const) {
     app.post(`/v1/identity/principals/:id/${verb}`, async (req, reply) => {
       const id = uuid.safeParse((req.params as { id: string }).id);
@@ -415,7 +438,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   const bad = (reply: { code: (n: number) => { send: (b: unknown) => unknown } }, e: z.ZodError) => reply.code(400).send({ error: "invalid_body", details: e.flatten() });
   const idOf = (req: { params: unknown }) => uuid.safeParse((req.params as { id: string }).id);
 
-  app.get("/v1/identity/reviewers", async () => tenant(async c => (await listPrincipals(c)).filter(p => !p.disabled && permissionsOf(p.roles).has("decision.make")).map(p => ({ id: p.id, name: p.displayName ?? p.subject, roles: p.roles }))));
+  app.get("/v1/identity/reviewers", async () => tenant(async c => (await listPrincipals(c)).filter(p => !p.disabled && !(p.expiresAt && p.expiresAt.getTime() <= Date.now()) && permissionsOf(p.roles).has("decision.make")).map(p => ({ id: p.id, name: p.displayName ?? p.subject, roles: p.roles }))));
   app.get("/v1/cases", async (req, reply) => {
     const q = z.object({ state: z.enum(["open", "analysis", "in_review", "decided", "closed"]).optional(), domain: z.string().max(200).optional(), active: z.enum(["1", "true"]).optional(), q: z.string().max(100).optional(), ...pageQ }).safeParse(req.query);
     if (!q.success) return reply.code(400).send({ error: "invalid_query" });
@@ -485,7 +508,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
       catalog: Object.values(TEMPLATES).map(t => ({ key: t.key, title: t.title, pack: t.pack, parameters: t.defaults(null) })),
       schedule: {
         sources: (await c.query("SELECT source_key, name, platform_type FROM sources WHERE status = 'approved' ORDER BY source_key")).rows.map((r: { source_key: string; name: string; platform_type: string }) => ({ key: r.source_key, name: r.name, platform: r.platform_type, modes: (["series", "catalog"] as const).filter(m => connectorFor(r.platform_type, m, r.source_key)) })).filter((r: { modes: string[] }) => r.modes.length > 0),
-        stewards: (await listPrincipals(c)).filter(p => !p.disabled && permissionsOf(p.roles).has("case.write")).map(p => ({ id: p.id, name: p.displayName ?? p.subject })),
+        stewards: (await listPrincipals(c)).filter(p => !p.disabled && !(p.expiresAt && p.expiresAt.getTime() <= Date.now()) && permissionsOf(p.roles).has("case.write")).map(p => ({ id: p.id, name: p.displayName ?? p.subject })),
       },
       exposure: links.map(l => ({ code: String(l.attrs.code), name: l.name, hormuzShare: Number(l.params.hormuzShare), spareBypassKbd: Number(l.params.spareBypassKbd), linkClass: l.linkClass })),
     };

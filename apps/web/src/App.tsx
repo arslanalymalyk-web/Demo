@@ -26,7 +26,8 @@ import { Retention } from "./views/retention";
 void [tx("executive"), tx("analyst"), tx("expert"), tx("approver"), tx("operations"), tx("administrator"), tx("auditor")];
 type Phase = { name: "starting" } | { name: "signed-out"; error?: string } | { name: "denied"; message: string } | { name: "ready"; me: Me };
 
-function SignIn({ error }: { error?: string }): ReactNode {
+function SignIn({ error, onEmergency }: { error?: string; onEmergency: (token: string) => void }): ReactNode {
+  const [tok, setTok] = useState("");
   return (
     <main className="signin" id="main">
       <div className="card panel">
@@ -35,6 +36,14 @@ function SignIn({ error }: { error?: string }): ReactNode {
         {error ? <div className="note err" role="alert">{error}</div> : null}
         <button className="primary" onClick={() => void startLogin().catch(() => location.reload())}>{t("Sign in with your institution")}</button>
         <p className="small muted" style={{ marginTop: 18 }}>{t("Access is granted by your institution's identity provider and by the roles assigned to you here. Every action is recorded.")}</p>
+        <details style={{ marginTop: 14 }}>
+          <summary className="small">{t("Emergency access")}</summary>
+          <form className="stack" style={{ marginTop: 8 }} onSubmit={e => { e.preventDefault(); onEmergency(tok.trim()); }}>
+            <p className="small muted">{t("For when the identity provider cannot be used. It needs a token made by two custodians, lasts a few hours and is reported to the administrators.")}</p>
+            <label>{t("Emergency token")}<textarea rows={3} value={tok} onChange={e => setTok(e.target.value)} className="mono" autoComplete="off" /></label>
+            <div><button disabled={tok.trim() === ""}>{t("Use emergency token")}</button></div>
+          </form>
+        </details>
       </div>
     </main>
   );
@@ -73,7 +82,15 @@ export default function App(): ReactNode {
   useEffect(() => { const n = NAV.find(x => x.view.includes(route.view) && (!x.id || x.id === route.id)); document.title = phase.name === "ready" && n ? `${t(n.label)} · TIGERIS` : "TIGERIS"; }, [phase.name, route, language]);
 
   if (phase.name === "starting") return <div className="signin" role="status">{t("Signing in…")}</div>;
-  if (phase.name === "signed-out") return <SignIn {...(phase.error ? { error: phase.error } : {})} />;
+  const emergency = async (token: string) => {
+    try {
+      const exp = (JSON.parse(atob(token.split(".")[1]!.replace(/-/g, "+").replace(/_/g, "/"))) as { exp: number }).exp * 1000;
+      setToken(token); const me = await api<Me>("/v1/identity/me");
+      setTimeout(() => { setToken(null); setPhase({ name: "signed-out", error: t("Your session expired. Sign in again.") }); }, Math.max(0, exp - Date.now() - 5000));
+      setPhase({ name: "ready", me });
+    } catch (e) { setToken(null); setPhase({ name: "signed-out", error: e instanceof ApiError ? e.message : t("That token was not accepted.") }); }
+  };
+  if (phase.name === "signed-out") return <SignIn {...(phase.error ? { error: phase.error } : {})} onEmergency={tok => void emergency(tok)} />;
   if (phase.name === "denied") return <main className="signin" id="main"><div className="card panel"><h1>TIGERIS</h1><div className="note err" role="alert">{phase.message}</div><p>{t("Your identity is valid, but you have not been given access to this institution. Ask an administrator to add you.")}</p><button onClick={() => { void api("/v1/identity/me/sign-out", { method: "POST", body: {} }).catch(() => undefined).finally(() => { setToken(null); setPhase({ name: "signed-out" }); }); }}>{t("Back")}</button></div></main>;
 
   const me = phase.me, can = (p: string) => me.permissions.includes(p);
@@ -133,8 +150,9 @@ export default function App(): ReactNode {
           <div className="seg" role="group" aria-label={t("Language")}><button aria-pressed={language === "en"} lang="en" onClick={() => choose("en")}>English</button><button aria-pressed={language === "ar"} lang="ar" onClick={() => choose("ar")}>العربية</button></div>
           <button aria-pressed={prefs.motion === "reduced"} onClick={() => prefs.setMotion(prefs.motion === "reduced" ? "full" : "reduced")}>{prefs.motion === "reduced" ? t("Motion: reduced") : t("Motion: full")}</button>
           <span className="who">{me.displayName ?? me.subject} · {me.roles.map(r => t(r)).join("، ") || t("no role")}</span>
-          <button onClick={() => { setToken(null); setPhase({ name: "signed-out" }); }}>{t("Sign out")}</button>
+          <button onClick={() => { void api("/v1/identity/me/sign-out", { method: "POST", body: {} }).catch(() => undefined).finally(() => { setToken(null); setPhase({ name: "signed-out" }); }); }}>{t("Sign out")}</button>
         </header>
+        {me.emergencyAccess ? <div className="note err" role="status" style={{ margin: "8px 16px 0" }}>{t("You are signed in with emergency access. Everything you do is recorded and the administrators have been told.")}</div> : null}
         <main className="content" id="main" tabIndex={-1} key={hash}><ErrorBoundary>{body}</ErrorBoundary></main>
       </div>
     </div>

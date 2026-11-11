@@ -12,3 +12,5 @@ Generate random values with `openssl rand -base64 36 | tr -d '\n'`. Prefer the c
 | backup_key | passphrase of at least 32 characters; keep a copy in the client's safe. Without it no backup can be read. |
 
 Rotation: change the file, then `docker compose up -d --force-recreate <service>`. Database passwords also need `ALTER ROLE ... PASSWORD` first.
+| document_key | optional (docker-compose.keys.yml): at least 32 characters; seals uploaded documents. Keep a copy somewhere the database backup is not. Without it sealed documents cannot be read. |
+| audit_anchor_key | optional (docker-compose.keys.yml): at least 32 characters; signs audit checkpoints. Keep it away from the database administrator. |

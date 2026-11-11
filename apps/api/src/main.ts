@@ -1,6 +1,7 @@
 import pg from "pg";
 import { DocumentCrypto, DocumentQueue, useDocumentCrypto, clamavScanner, stubScanner, type Scanner } from "../../../packages/documents/src/index.js";
-import { getLockdown, oidcVerifier, remoteKeys } from "../../../packages/identity/src/index.js";
+import { breakGlassVerifier, getLockdown, oidcVerifier, remoteKeys, withBreakGlass } from "../../../packages/identity/src/index.js";
+import { smtpProxy } from "./config.js";
 import { CheckpointRunner } from "../../../packages/ingest/src/anchor-runner.js";
 import { withTenant } from "../../../packages/ingest/src/store.js";
 import { anthropicAdapter, extractiveAdapter, openAiCompatibleAdapter, type ModelAdapter } from "../../../packages/reasoning/src/index.js";
@@ -39,7 +40,7 @@ if (scanner) {
 let mailer: Mailer | null = null;
 if (cfg.alerts.enabled) {
   const a = cfg.alerts;
-  try { mailer = createMailer({ transport: a.transport, host: a.host, port: a.port, security: a.security, user: a.user, password: a.password, from: a.from, production: cfg.production }); await mailer.verify(); console.log(JSON.stringify({ level: "info", msg: "alert relay answered", transport: a.transport })); }
+  try { mailer = createMailer({ proxy: smtpProxy(process.env, a.host), transport: a.transport, host: a.host, port: a.port, security: a.security, user: a.user, password: a.password, from: a.from, production: cfg.production }); await mailer.verify(); console.log(JSON.stringify({ level: "info", msg: "alert relay answered", transport: a.transport })); }
   catch (e) { console.error(JSON.stringify({ level: "warn", msg: "alert relay is not answering; notices will be retried", error: (e as Error).message })); }
 }
 if (cfg.documentKeys) useDocumentCrypto(new DocumentCrypto(cfg.documentKeys.current, cfg.documentKeys.previous));
@@ -48,7 +49,7 @@ const scheduler = cfg.scheduler.enabled ? new Scheduler({ pool, institutionId: c
 const alertRunner = mailer ? new AlertRunner({ pool, institutionId: cfg.institutionId, mailer, baseUrl: cfg.alerts.baseUrl, backupMaxAgeHours: cfg.backupMaxAgeHours, ...(cfg.checkpoint ? { checkpointMaxAgeHours: cfg.checkpoint.everyHours * 2 } : {}), engine: { reminderHours: cfg.alerts.reminderHours, maxPerHour: cfg.alerts.maxPerHour }, ...(scanner ? { scanner: async () => ({ configured: true, reachable: await scanner.ping().then(() => true, () => false) }) } : {}), log: (m, o) => console.log(JSON.stringify({ level: "info", msg: m, ...o })) }) : null;
 const checkpoints = cfg.checkpoint && cfg.auditAnchorKey ? new CheckpointRunner({ pool, institutionId: cfg.institutionId, key: cfg.auditAnchorKey, dir: cfg.checkpoint.dir, everyHours: cfg.checkpoint.everyHours, log: (msg, o) => console.log(JSON.stringify({ level: "info", msg, ...o })) }) : null;
 const app = buildServer({
-  scanner, pool, institutionId: cfg.institutionId, verifier: oidcVerifier(cfg.oidc, remoteKeys(cfg.oidc.jwksUri)), documents, clientDataEnabled: cfg.clientDataEnabled,
+  scanner, pool, institutionId: cfg.institutionId, verifier: cfg.breakGlassPublicKey ? withBreakGlass(oidcVerifier(cfg.oidc, remoteKeys(cfg.oidc.jwksUri)), breakGlassVerifier(cfg.breakGlassPublicKey, cfg.oidc.issuer)) : oidcVerifier(cfg.oidc, remoteKeys(cfg.oidc.jwksUri)), documents, clientDataEnabled: cfg.clientDataEnabled,
   logger: { level: cfg.logLevel, redact: { paths: ["req.headers.authorization", "req.headers.cookie", "res.headers['set-cookie']"], remove: true } },
   reasoning: adapter ? { adapter } : null, scheduler, backupMaxAgeHours: cfg.backupMaxAgeHours, ...(cfg.auditAnchorKey ? { auditAnchorKey: cfg.auditAnchorKey } : {}), alerts: mailer ? { mailer, baseUrl: cfg.alerts.baseUrl, ...(alertRunner ? { runner: alertRunner } : {}) } : null, rateLimit: cfg.rateLimit, metricsToken: cfg.metricsToken, trustProxy: cfg.trustProxy,
 });

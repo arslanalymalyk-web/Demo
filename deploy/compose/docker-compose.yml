@@ -1,14 +1,14 @@
 # Single-node deployment on the client's own infrastructure. One deployment per institution.
 #   cp .env.example .env   (fill it in)      mkdir secrets && see secrets/README for the files        place TLS files in ./tls
 #   docker compose build && docker compose up -d
-# The API and database sit on an internal network with no route out. The proxy is the only published service.
-# Scheduled ingestion runs as a separate, short-lived container that is the only one allowed to reach the public data sources.
+# The API and database sit on an internal network with no route out. The web proxy is the only published service.
+# Everything the API needs from outside (identity provider keys, source hosts, a hosted model, the mail relay) goes through the egress proxy below, which opens a tunnel only to the hosts in EGRESS_ALLOW.
+# Scheduled ingestion, whether inside the API or as the separate short-lived ingest container, reaches the public data sources only through that proxy.
 name: tigeris
 
 networks:
   backend: { internal: true }        # database, API and proxy talk here. No outbound route.
-  idp: {}                            # lets the API reach the institution's identity provider for signing keys. Restrict it with the client's network policy to that one host.
-  egress: {}                         # used only by the ingest job. Restrict it to the allowlisted source hosts.
+  egress: {}                         # the only network with a route out. Only the egress proxy (and the scanner's signature refresh and the backup job) are on it.
 
 secrets:
   db_owner_password: { file: ./secrets/db_owner_password }
@@ -80,10 +80,28 @@ services:
       OIDC_JWKS_URI: ${OIDC_JWKS_URI:-}
       WEB_ORIGIN: https://${SERVER_NAME:-localhost}
       TIGERIS_ENV: production
+      HTTPS_PROXY: http://egress-proxy:3128
+      NODE_USE_ENV_PROXY: "1"
+      NO_PROXY: db,egress-proxy,clamav,localhost,127.0.0.1
     secrets: [db_owner_url, db_app_url]
     entrypoint: ["node", "--import", "tsx", "packages/setup/src/cli.ts"]
-    networks: [backend, idp]
-    depends_on: { migrate: { condition: service_completed_successfully } }
+    networks: [backend]
+    depends_on: { migrate: { condition: service_completed_successfully }, egress-proxy: { condition: service_healthy } }
+
+  # The only way out. It allows an encrypted tunnel to exactly the host:port pairs in EGRESS_ALLOW and nothing else, and logs every decision.
+  # EGRESS_ALLOW example: login.client.example:443,api.imf.org:443,smtp.client.example:587
+  # Put an identity provider or mail relay that lives inside the institution's network in EGRESS_ALLOW_PRIVATE as well, so it may resolve to a private address.
+  egress-proxy:
+    <<: *hardening
+    build: { context: ../.., dockerfile: Dockerfile, target: app }
+    read_only: true
+    environment:
+      EGRESS_ALLOW: ${EGRESS_ALLOW:?list the hosts this deployment may reach, as host:port}
+      EGRESS_ALLOW_PRIVATE: ${EGRESS_ALLOW_PRIVATE:-}
+      EGRESS_PORT: "3128"
+    entrypoint: ["/usr/bin/tini", "--", "node", "--import", "tsx", "packages/core/src/egress-proxy-main.ts"]
+    healthcheck: { test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3128/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"], interval: 30s, timeout: 5s, retries: 3 }
+    networks: [backend, egress]
 
   app:
     <<: *hardening
@@ -103,13 +121,13 @@ services:
       TIGERIS_REASONING_PROVIDER: ${TIGERIS_REASONING_PROVIDER:-off}   # off | anthropic | openai_compatible | local_extractive
       TIGERIS_MODEL_NAME: ${TIGERIS_MODEL_NAME:-}
       TIGERIS_MODEL_BASE_URL: ${TIGERIS_MODEL_BASE_URL:-}
-      # A hosted model also needs: the egress network below, the model host on the network allowlist, and TIGERIS_MODEL_API_KEY_FILE pointing at a mounted secret.
-      # Scheduled ingestion runs inside the API. It needs the egress network below and the source hosts on the network allowlist; off by default.
+      # A hosted model also needs its host:443 in EGRESS_ALLOW and TIGERIS_MODEL_API_KEY_FILE pointing at a mounted secret.
+      # Scheduled ingestion runs inside the API. It needs the source hosts in EGRESS_ALLOW; off by default.
       # Malware scanning of uploads (profile "scanner" below). Required before institution documents are enabled.
       TIGERIS_SCANNER: ${TIGERIS_SCANNER:-off}                        # off | clamav
       TIGERIS_CLAMAV_HOST: ${TIGERIS_CLAMAV_HOST:-clamav}
       TIGERIS_CLAMAV_PORT: ${TIGERIS_CLAMAV_PORT:-3310}
-      # Alerts by email through the client's own mail relay. Off by default. The relay must be reachable from this container (add its network),
+      # Alerts by email through the client's own mail relay. Off by default. The relay host:port goes in EGRESS_ALLOW (mail is tunnelled through the egress proxy), or in NO_PROXY if it is on the backend network,
       # and the relay password goes in a mounted secret: TIGERIS_SMTP_PASSWORD_FILE.
       TIGERIS_ALERTS_ENABLED: ${TIGERIS_ALERTS_ENABLED:-false}
       TIGERIS_SMTP_HOST: ${TIGERIS_SMTP_HOST:-}
@@ -123,9 +141,15 @@ services:
       TIGERIS_SCHEDULER_ENABLED: ${TIGERIS_SCHEDULER_ENABLED:-false}
       TIGERIS_SCHEDULER_TICK_SECONDS: ${TIGERIS_SCHEDULER_TICK_SECONDS:-60}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      OIDC_MAX_TOKEN_AGE_SECONDS: ${OIDC_MAX_TOKEN_AGE_SECONDS:-28800}
+      TIGERIS_BREAKGLASS_PUBLIC_KEY: ${TIGERIS_BREAKGLASS_PUBLIC_KEY:-}
+      # Every outbound request goes through the egress proxy; this container has no other route.
+      HTTPS_PROXY: http://egress-proxy:3128
+      NODE_USE_ENV_PROXY: "1"
+      NO_PROXY: db,egress-proxy,clamav,localhost,127.0.0.1
     secrets: [db_app_url, metrics_token]
-    networks: [backend, idp]
-    depends_on: { migrate: { condition: service_completed_successfully } }
+    networks: [backend]
+    depends_on: { migrate: { condition: service_completed_successfully }, egress-proxy: { condition: service_healthy } }
 
   # ClamAV, opt-in: docker compose --profile scanner up -d. It listens on the internal network only; the egress network lets it refresh its signatures
   # (restrict that to the ClamAV signature hosts). Pin the image by digest for a release.
@@ -133,7 +157,7 @@ services:
     profiles: ["scanner"]
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
-    image: ${CLAMAV_IMAGE:-clamav/clamav:1.4}
+    image: ${CLAMAV_IMAGE:-clamav/clamav:1.4@sha256:cbc30de94b6e9b33ac14136ff45306cee02a1f9ae522394a3cc5b9215d1affe9}
     environment:
       CLAMD_STARTUP_TIMEOUT: "180"
     volumes:
@@ -164,8 +188,8 @@ services:
     cap_drop: ["ALL"]
     read_only: true
     tmpfs: ["/tmp"]
-    environment: { TIGERIS_INSTITUTION_ID: "${TIGERIS_INSTITUTION_ID:-}", DATABASE_URL_FILE: /run/secrets/db_app_url }
+    environment: { TIGERIS_INSTITUTION_ID: "${TIGERIS_INSTITUTION_ID:-}", DATABASE_URL_FILE: /run/secrets/db_app_url, HTTPS_PROXY: "http://egress-proxy:3128", NO_PROXY: "db,egress-proxy,clamav,localhost,127.0.0.1" }
     secrets: [db_app_url]
     entrypoint: ["node", "--use-env-proxy", "--import", "tsx", "packages/ingest/src/cli.ts"]
-    networks: [backend, egress]
-    depends_on: { db: { condition: service_healthy } }
+    networks: [backend]
+    depends_on: { db: { condition: service_healthy }, egress-proxy: { condition: service_healthy } }

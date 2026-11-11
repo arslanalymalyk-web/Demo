@@ -31,6 +31,9 @@ export async function desiredConditions(c: pg.PoolClient, ctx: Context, now: Dat
   // Base backups: the backup script records each run, so a missed or failed one is visible here. Monitoring is off unless a limit is set.
   const bk = await backupStatus(c, now, ctx.backupMaxAgeHours ?? 0);
   if (["overdue", "failing", "never"].includes(bk.state)) out.push({ key: "ops:backup", category: "operations", kind: "state", ref: null, link: "/#/readiness", detail: bk.state, audience: { roles: ADMINS, principals: [] } });
+  // Emergency sign-in was used in the last day: expected to be rare and always worth a person knowing.
+  if ((await c.query("SELECT 1 FROM audit_events WHERE action = 'identity.break_glass_used' AND occurred_at > $1 LIMIT 1", [new Date(now.getTime() - 86_400_000).toISOString()])).rowCount)
+    out.push({ key: "ops:break_glass", category: "operations", kind: "state", ref: null, link: "/#/audit", detail: "used", audience: { roles: ADMINS, principals: [] } });
   // Signed audit checkpoints: when they are scheduled, a missing one means the folder is unwritable or the job stopped. Off unless a limit is set.
   if ((ctx.checkpointMaxAgeHours ?? 0) > 0) {
     const t = (await c.query("SELECT COALESCE(max(occurred_at) FILTER (WHERE action = 'audit.checkpoint_saved'), min(occurred_at)) AS t FROM audit_events")).rows[0].t as Date | null;
@@ -44,7 +47,7 @@ export interface Recipient { principalId: string; email: string | null; name: st
 export async function resolveAudience(c: pg.PoolClient, a: Audience): Promise<Recipient[]> {
   const r = await c.query(
     `SELECT DISTINCT p.id, p.email, COALESCE(p.display_name, p.idp_subject) AS name FROM principals p
-     WHERE p.disabled_at IS NULL AND (p.id = ANY($1::uuid[]) OR EXISTS (SELECT 1 FROM principal_roles pr JOIN roles ro ON ro.id = pr.role_id AND ro.institution_id = pr.institution_id WHERE pr.principal_id = p.id AND pr.institution_id = p.institution_id AND ro.key = ANY($2::text[])))
+     WHERE p.disabled_at IS NULL AND (p.expires_at IS NULL OR p.expires_at > now()) AND (p.id = ANY($1::uuid[]) OR EXISTS (SELECT 1 FROM principal_roles pr JOIN roles ro ON ro.id = pr.role_id AND ro.institution_id = pr.institution_id WHERE pr.principal_id = p.id AND pr.institution_id = p.institution_id AND ro.key = ANY($2::text[])))
      ORDER BY name`, [a.principals, a.roles]);
   return r.rows.map(x => ({ principalId: x.id, email: x.email ?? null, name: x.name }));
 }

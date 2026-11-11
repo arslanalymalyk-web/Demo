@@ -2,13 +2,13 @@ import type pg from "pg";
 import { audit } from "../../ingest/src/store.js";
 import { ROLE_PERMISSIONS } from "./permissions.js";
 
-export interface Principal { id: string; issuer: string; subject: string; displayName: string | null; roles: string[]; disabled: boolean; sessionsValidAfter: Date | null }
+export interface Principal { id: string; issuer: string; subject: string; displayName: string | null; roles: string[]; disabled: boolean; sessionsValidAfter: Date | null; expiresAt: Date | null }
 export class IdentityError extends Error { constructor(message: string, readonly code: "not_found" | "conflict" | "invalid") { super(message); } }
 
-const SELECT = `SELECT p.id, p.idp_issuer, p.idp_subject, p.display_name, p.disabled_at, p.sessions_valid_after,
+const SELECT = `SELECT p.id, p.idp_issuer, p.idp_subject, p.display_name, p.disabled_at, p.sessions_valid_after, p.expires_at,
   COALESCE(array_agg(r.key ORDER BY r.key) FILTER (WHERE r.key IS NOT NULL), '{}') AS roles
   FROM principals p LEFT JOIN principal_roles pr ON pr.principal_id = p.id AND pr.institution_id = p.institution_id LEFT JOIN roles r ON r.id = pr.role_id AND r.institution_id = pr.institution_id`;
-const map = (r: Record<string, unknown>): Principal => ({ id: r.id as string, issuer: r.idp_issuer as string, subject: r.idp_subject as string, displayName: (r.display_name as string | null) ?? null, roles: r.roles as string[], disabled: r.disabled_at !== null, sessionsValidAfter: r.sessions_valid_after ? new Date(r.sessions_valid_after as string) : null });
+const map = (r: Record<string, unknown>): Principal => ({ id: r.id as string, issuer: r.idp_issuer as string, subject: r.idp_subject as string, displayName: (r.display_name as string | null) ?? null, roles: r.roles as string[], disabled: r.disabled_at !== null, sessionsValidAfter: r.sessions_valid_after ? new Date(r.sessions_valid_after as string) : null, expiresAt: r.expires_at ? new Date(r.expires_at as string) : null });
 
 export async function findPrincipal(c: pg.PoolClient, issuer: string, subject: string): Promise<Principal | null> {
   const r = await c.query(`${SELECT} WHERE p.idp_issuer = $1 AND p.idp_subject = $2 GROUP BY p.id`, [issuer, subject]);
@@ -44,9 +44,10 @@ async function assertAdminRemains(c: pg.PoolClient, principalId: string): Promis
   if (r.rows[0].n === 0) throw new IdentityError("at least one active administrator must remain", "conflict");
 }
 
-export async function provisionPrincipal(c: pg.PoolClient, institutionId: string, actor: { type: string; id?: string }, p: { issuer: string; subject: string; displayName?: string | null; roles: string[] }): Promise<Principal> {
+export async function provisionPrincipal(c: pg.PoolClient, institutionId: string, actor: { type: string; id?: string }, p: { issuer: string; subject: string; displayName?: string | null; roles: string[]; expiresAt?: Date | null }): Promise<Principal> {
   await assertRoles(c, p.roles);
-  const ins = await c.query("INSERT INTO principals (institution_id, idp_issuer, idp_subject, display_name) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING RETURNING id", [institutionId, p.issuer, p.subject, p.displayName ?? null]);
+  if (p.expiresAt && p.expiresAt.getTime() <= Date.now()) throw new IdentityError("the expiry must be in the future", "invalid");
+  const ins = await c.query("INSERT INTO principals (institution_id, idp_issuer, idp_subject, display_name, expires_at) VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING RETURNING id", [institutionId, p.issuer, p.subject, p.displayName ?? null, p.expiresAt ?? null]);
   if (!ins.rows[0]) throw new IdentityError("principal already exists", "conflict");
   await writeRoles(c, institutionId, ins.rows[0].id, p.roles);
   await audit(c, institutionId, { actorType: actor.type, ...(actor.id ? { actorId: actor.id } : {}), action: "identity.principal_provisioned", objectType: "principal", objectId: ins.rows[0].id, payload: { issuer: p.issuer, subject: p.subject, roles: [...new Set(p.roles)].sort() } });
@@ -72,10 +73,22 @@ export async function setDisabled(c: pg.PoolClient, institutionId: string, actor
   return (await getPrincipal(c, principalId))!;
 }
 
-/** Ends every session of one person (or, with no person, of everyone) at this moment: tokens issued earlier are refused from now on. Returns how many people were affected. */
-export async function revokeSessions(c: pg.PoolClient, institutionId: string, actor: { type: string; id?: string }, principalId: string | null, reason: string): Promise<number> {
+/** Ends every session of one person (or, with no person, of everyone): tokens issued before the cut-off are refused. Token issue times are whole seconds, so an administrator's revocation cuts at the next whole second (nothing issued before it survives), while a person signing out cuts at the current one (signing straight back in works). Returns how many people were affected. */
+export async function revokeSessions(c: pg.PoolClient, institutionId: string, actor: { type: string; id?: string }, principalId: string | null, reason: string, own = false): Promise<number> {
   if (principalId !== null && !(await getPrincipal(c, principalId))) throw new IdentityError("principal not found", "not_found");
-  const n = (await c.query("UPDATE principals SET sessions_valid_after = clock_timestamp() WHERE ($1::uuid IS NULL OR id = $1)", [principalId])).rowCount ?? 0;
+  const n = (await c.query("UPDATE principals SET sessions_valid_after = date_trunc('second', clock_timestamp()) + CASE WHEN $2 THEN interval '0' ELSE interval '1 second' END WHERE ($1::uuid IS NULL OR id = $1)", [principalId, own])).rowCount ?? 0;
   await audit(c, institutionId, { actorType: actor.type, ...(actor.id ? { actorId: actor.id } : {}), action: principalId ? "identity.sessions_revoked" : "identity.sessions_revoked_all", objectType: principalId ? "principal" : "institution", objectId: principalId ?? institutionId, payload: { reason, people: n } });
   return n;
+}
+
+/** Sets or clears when a person's access ends. The reason is kept in the audit trail. */
+export async function setExpiry(c: pg.PoolClient, institutionId: string, actor: { type: string; id?: string }, principalId: string, expiresAt: Date | null, reason: string): Promise<Principal> {
+  const cur = await getPrincipal(c, principalId);
+  if (!cur) throw new IdentityError("principal not found", "not_found");
+  if (expiresAt && expiresAt.getTime() <= Date.now()) throw new IdentityError("the expiry must be in the future", "invalid");
+  if (expiresAt === null && cur.expiresAt === null) throw new IdentityError("this person's access has no expiry", "conflict");
+  if (expiresAt === null && cur.roles.length === 0) throw new IdentityError("a person with no roles cannot be made permanent", "conflict");
+  await c.query("UPDATE principals SET expires_at = $2 WHERE id = $1", [principalId, expiresAt]);
+  await audit(c, institutionId, { actorType: actor.type, ...(actor.id ? { actorId: actor.id } : {}), action: "identity.expiry_changed", objectType: "principal", objectId: principalId, payload: { from: cur.expiresAt?.toISOString() ?? null, to: expiresAt?.toISOString() ?? null, reason } });
+  return (await getPrincipal(c, principalId))!;
 }

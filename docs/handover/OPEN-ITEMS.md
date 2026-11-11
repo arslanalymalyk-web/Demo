@@ -38,11 +38,13 @@ _Confidential. Property of Tiger Capital AI. Prepared for the named recipients o
 
 ## Sovereignty
 
-1. A decision on the egress route: a forward proxy with an allowlist and a host firewall rule, built and tested in the client's environment (SOVEREIGNTY.md gap A).
+1. Run the egress check and load the host firewall file in the client's environment, and fill `EGRESS_ALLOW` (SOVEREIGNTY.md gap A).
 2. Where audit checkpoints are kept (a write-once mount the database administrator cannot change, set as `TIGERIS_AUDIT_CHECKPOINT_DIR`) and who checks them.
 6. Where the document key (`TIGERIS_DOCUMENT_KEY`) is held and backed up, separately from the database. Losing it loses the sealed documents.
-3. A break-glass sign-in path for when the identity provider is unavailable, and who may use it.
-4. A vendor-access policy: no standing access, how time-limited access is approved and recorded.
+3. Name the two break-glass custodians, make the key, store the shares, and run the drill (SOVEREIGNTY.md gap E).
+4. Adopt, change or reject the vendor-access policy in [VENDOR-ACCESS.md](VENDOR-ACCESS.md).
+7. Hold the release signing key, publish its fingerprint, build the application image, and run the `release` workflow (SOVEREIGNTY.md gap F).
+8. Run the acceptance script in the production environment and attach evidence for every manual item ([ACCEPTANCE.md](ACCEPTANCE.md)).
 5. (Decided: granting `administrator` or `approver` needs a second administrator. Confirm with the client that two administrators are always available.)
 
 ## Arabic interface
@@ -65,7 +67,7 @@ _Confidential. Property of Tiger Capital AI. Prepared for the named recipients o
 
 ## Engineering and verification
 
-1. Run the CI `images` job and review the image inventory (the images have never been built).
+1. Build the application image and run the CI `images` job and the `release` workflow; review the image inventory. (The web image has been built and run; the application image has not.)
 2. Run the CI workflow on GitHub.
 3. Run the backup drill in the client's environment and against the official PostgreSQL image.
 4. Commission the independent penetration test (decision 11).
