@@ -19,10 +19,10 @@ TIGERIS AI OS is an institution-owned, model-agnostic intelligence system where 
 | `apps/api` | The HTTP API (Fastify). Every route has an access rule. |
 | `apps/web` | The web interface (React, Vite). Ivory design, navy theme, right-to-left layout. |
 | `packages/*` | The modules: `core`, `connectors`, `ingest`, `graph`, `scenario`, `identity`, `cases`, `governance`, `documents`, `sectors`, `settings`, `retention`, `reasoning`, `scheduler`, `setup`, `alerts` |
-| `db/migrations` | Fifteen numbered SQL migrations, run by the owner role only |
+| `db/migrations` | Sixteen numbered SQL migrations, run by the owner role only |
 | `deploy/` | Container, proxy, database and backup files |
 | `docs/adr`, `docs/decisions` | Twenty-six architecture decision records and the 200-answer decision log with its resolutions |
-| `tests/`, `e2e/` | 311 unit and integration tests (one needs a real ClamAV daemon and is skipped without one) and 32 browser tests |
+| `tests/`, `e2e/` | 316 unit and integration tests (one needs a real ClamAV daemon and is skipped without one) and 32 browser tests |
 | `scripts/` | Database bootstrap, SBOM and licence check, offline bundle, geography build |
 
 ## Rules that bind everyone (from `CLAUDE.md`)

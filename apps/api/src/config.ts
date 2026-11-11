@@ -8,6 +8,7 @@ export interface Config {
   reasoning: { provider: "off" | "anthropic" | "openai_compatible" | "local_extractive"; model: string; baseUrl: string; apiKey: string | null };
   scheduler: { enabled: boolean; tickSeconds: number };
   alerts: { enabled: boolean; transport: "smtp" | "log"; host: string; port: number; security: "starttls" | "tls" | "none"; user: string | null; password: string | null; from: string; baseUrl: string; reminderHours: number; maxPerHour: number };
+  backupMaxAgeHours: number;
   scanner: { kind: "off" | "clamav" | "stub"; host: string; port: number; socket: string };
   clientDataEnabled: boolean; metricsToken: string | null; trustProxy: boolean; logLevel: string; rateLimit: { max: number; timeWindow: string } | null;
 }
@@ -56,6 +57,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     if (!Number.isFinite(al.reminderHours) || al.reminderHours < 1 || al.reminderHours > 168) problems.push("TIGERIS_ALERTS_REMINDER_HOURS must be between 1 and 168");
     if (!Number.isInteger(al.maxPerHour) || al.maxPerHour < 1 || al.maxPerHour > 2000) problems.push("TIGERIS_ALERTS_MAX_PER_HOUR must be between 1 and 2000");
   }
+  const backupMax = Number(env.TIGERIS_BACKUP_MAX_AGE_HOURS ?? 0);
+  if (!Number.isFinite(backupMax) || backupMax < 0 || backupMax > 720) problems.push("TIGERIS_BACKUP_MAX_AGE_HOURS must be between 0 (off) and 720");
   const tick = Number(env.TIGERIS_SCHEDULER_TICK_SECONDS ?? 60);
   if (!Number.isFinite(tick) || tick < 10 || tick > 3600) problems.push("TIGERIS_SCHEDULER_TICK_SECONDS must be between 10 and 3600");
   const max = Number(env.RATE_LIMIT_PER_MINUTE ?? 600);
@@ -63,7 +66,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   if (problems.length) throw new Error(`configuration refused:\n - ${problems.join("\n - ")}`);
   return {
     production, databaseUrl, institutionId, port: Number(env.PORT ?? 3000), host: env.HOST ?? "127.0.0.1", oidc: { issuer, audience, jwksUri, requireMfa },
-    alerts: al as Config["alerts"],
+    alerts: al as Config["alerts"], backupMaxAgeHours: backupMax,
     scanner: { kind: kind as Config["scanner"]["kind"], host: clamHost, port: clamPort, socket: clamSocket },
     scheduler: { enabled: env.TIGERIS_SCHEDULER_ENABLED === "true", tickSeconds: tick },
     reasoning: { provider: provider as Config["reasoning"]["provider"], model, baseUrl, apiKey },

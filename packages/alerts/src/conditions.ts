@@ -1,11 +1,12 @@
 import type pg from "pg";
+import { backupStatus } from "./backup.js";
 import { sourceHealth } from "../../scheduler/src/index.js";
 import { effectiveSchedule } from "../../settings/src/index.js";
 import type { Category } from "./templates.js";
 
 export interface Audience { roles: string[]; principals: string[] }
 export interface Desired { key: string; category: Category; kind: "event" | "state"; ref: string | null; link: string; detail: string | null; audience: Audience }
-export interface Context { auditOk: boolean | null; scanner: { configured: boolean; reachable: boolean } | null }
+export interface Context { auditOk: boolean | null; scanner: { configured: boolean; reachable: boolean } | null; backupMaxAgeHours?: number }
 
 const ADMINS = ["administrator", "auditor"];
 
@@ -27,6 +28,9 @@ export async function desiredConditions(c: pg.PoolClient, ctx: Context, now: Dat
   // The log archive keeps point-in-time recovery possible. A failure newer than the last success is worth a person's attention. How old the last base backup is cannot be read from the database.
   const arch = (await c.query("SELECT last_archived_time, last_failed_time FROM pg_stat_archiver")).rows[0];
   if (arch?.last_failed_time && (!arch.last_archived_time || new Date(arch.last_failed_time) > new Date(arch.last_archived_time))) out.push({ key: "ops:wal_archive", category: "operations", kind: "state", ref: null, link: "/#/readiness", detail: "failing", audience: { roles: ADMINS, principals: [] } });
+  // Base backups: the backup script records each run, so a missed or failed one is visible here. Monitoring is off unless a limit is set.
+  const bk = await backupStatus(c, now, ctx.backupMaxAgeHours ?? 0);
+  if (["overdue", "failing", "never"].includes(bk.state)) out.push({ key: "ops:backup", category: "operations", kind: "state", ref: null, link: "/#/readiness", detail: bk.state, audience: { roles: ADMINS, principals: [] } });
   return out;
 }
 

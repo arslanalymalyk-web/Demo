@@ -8,7 +8,7 @@ REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 BK=/tmp/tigeris-bk; BD=/tmp/drill-backups; KEY=/tmp/drill.key; ENVF=/tmp/drill.env
 rm -rf "${BK:?}" "${BD:?}"; mkdir -p $BK $BD; cp "$REPO"/deploy/backup/* $BK/; chmod 755 $BK $BK/*; chown postgres:postgres $BD
 openssl rand -base64 48 > $KEY; chmod 644 $KEY
-printf 'BACKUP_DIR=%s\nBACKUP_KEY_FILE=%s\n' $BD $KEY > $ENVF; chmod 644 $ENVF
+printf 'BACKUP_DIR=%s\nBACKUP_KEY_FILE=%s\nBACKUP_RECORD_DB=drill\n' $BD $KEY > $ENVF; chmod 644 $ENVF
 pg_dropcluster --stop 16 drill >/dev/null 2>&1 || true
 pg_createcluster 16 drill --port 5499 >/dev/null 2>&1
 cat > /etc/postgresql/16/drill/conf.d/archive.conf <<EOF
@@ -30,6 +30,11 @@ $PS "$P -d drill -c \"INSERT INTO institutions (id, name) VALUES ('$INST','Drill
 for a in a1 a2 a3; do ev $a; done
 $PS "$P -Atc 'SHOW archive_mode; SHOW archive_command; SHOW wal_level'"
 echo "== base backup"; $PS "PGPORT=5499 PGHOST=/var/run/postgresql TIGERIS_BACKUP_ENV=$ENVF $BK/backup.sh"
+echo "recorded after the base backup: $($PS "$P -d drill -Atc \"SELECT status || ' ' || (bytes > 0)::text || ' ' || length(sha256) FROM backup_runs ORDER BY finished_at\"" | tr '\n' ';')  (expect: ok true 64)"
+echo -n "a failing backup is recorded as failed and the script still exits non-zero: "; mkdir -p /tmp/failbin; printf '#!/bin/sh\nexit 1\n' > /tmp/failbin/pg_basebackup; chmod 755 /tmp/failbin /tmp/failbin/pg_basebackup
+$PS "PATH=/tmp/failbin:\$PATH PGPORT=5499 PGHOST=/var/run/postgresql TIGERIS_BACKUP_ENV=$ENVF $BK/backup.sh" >/dev/null 2>&1; echo "exit $?"; rm -rf /tmp/failbin
+echo "recorded now: $($PS "$P -d drill -Atc \"SELECT string_agg(status || ':' || coalesce(note,''), ' | ' ORDER BY finished_at) FROM backup_runs\"")"
+echo -n "the runtime role cannot write or change the record: "; $PS "PGPASSWORD=apppw1 psql -X -q -h localhost -p 5499 -U tigeris_app -d drill -c \"INSERT INTO backup_runs (status, started_at) VALUES ('failed', now())\"" 2>&1 | tail -1
 ev b1; ev b2; $PS "$P -d drill -c 'SELECT pg_switch_wal()'" >/dev/null; sleep 2
 T=$($PS "$P -d drill -Atc \"SELECT to_char(now() AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS')\"")+00; echo "recovery point: $T"; sleep 2
 ev c1; ev c2; $PS "$P -d drill -c 'SELECT pg_switch_wal()'" >/dev/null; sleep 3

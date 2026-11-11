@@ -43,6 +43,14 @@ Every setting is an environment variable. A variable marked **secret** may inste
 | `TIGERIS_CLAMAV_HOST`, `TIGERIS_CLAMAV_PORT` | none, 3310 | Address of the ClamAV daemon. |
 | `TIGERIS_CLAMAV_SOCKET` | none | A socket path instead of host and port. |
 
+## Backups
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `TIGERIS_BACKUP_MAX_AGE_HOURS` | 0 (the compose file sets 36) | Alert, and show on Readiness, when the newest good base backup is older than this many hours or the newest run failed. 0 turns monitoring off. Between 0 and 720. |
+
+The backup script itself reads `BACKUP_DIR`, `BACKUP_KEY_FILE`, `KEEP_DAYS`, `BACKUP_RECORD` (set to 0 to stop it recording runs in the database) and `BACKUP_RECORD_DB` (the database name, default `tigeris`) from its own file; see [BACKUP-RESTORE.md](BACKUP-RESTORE.md).
+
 ## Optional services (all off by default)
 
 | Variable | Default | Meaning |

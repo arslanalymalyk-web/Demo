@@ -34,7 +34,7 @@ _Confidential. Property of Tiger Capital AI. Prepared for the named recipients o
 2. The address people use to open TIGERIS (links in the messages point there).
 3. Who should have an address and receive which notices; the steward named in the ingestion schedule receives source notices.
 4. A native Arabic reviewer for the Arabic text of the messages (`packages/alerts/src/templates.ts`).
-5. Decide how the age of the last base backup should be monitored, since the database cannot see it.
+5. Schedule `backup.sh` daily on the client's host and set `TIGERIS_BACKUP_MAX_AGE_HOURS` to match.
 
 ## Arabic interface
 

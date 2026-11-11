@@ -1,11 +1,12 @@
 import type pg from "pg";
 import { listPrincipals, permissionsOf } from "../../identity/src/index.js";
+import { backupStatus } from "../../alerts/src/backup.js";
 import { verifyAuditChain } from "../../ingest/src/lineage.js";
 import { activePolicy } from "../../governance/src/store.js";
 import { SCOPES, SCOPE_INFO, activeOf } from "../../settings/src/index.js";
 import type { Check } from "./checks.js";
 
-export interface Facts { clientDataEnabled: boolean; scanner: { configured: boolean; reachable: boolean }; scheduler: { enabled: boolean }; reasoning: { provider: string | null }; alerts: { configured: boolean; transport: string | null } }
+export interface Facts { clientDataEnabled: boolean; scanner: { configured: boolean; reachable: boolean }; scheduler: { enabled: boolean }; reasoning: { provider: string | null }; alerts: { configured: boolean; transport: string | null }; backupMaxAgeHours: number }
 const c = (id: string, title: string, status: Check["status"], detail: string, href?: string): Check & { href?: string } => ({ id, title, status, detail, ...(href ? { href } : {}) });
 
 /** Is this deployment ready for real use? Read from stored facts and the running configuration. "Fail" blocks use, "warn" needs a decision, "manual" needs a person to confirm. */
@@ -42,6 +43,12 @@ export async function installationReadiness(cx: pg.PoolClient, f: Facts): Promis
     : withEmail === 0 ? c("alerts", "Alerts by email", "warn", "Alerts are configured but nobody has an email address yet. Set addresses on the Alerts screen.", "#/alerts")
     : c("alerts", "Alerts by email", "pass", `${withEmail} ${withEmail === 1 ? "person has" : "people have"} an address. Send a test message from the Alerts screen to confirm the relay.`, "#/alerts"));
   out.push(c("assistant", "Assistant", "pass", f.reasoning.provider ? `Connected to ${f.reasoning.provider}.` : "Off. Nothing is sent to any model.", "#/assistant"));
+  const bk = await backupStatus(cx, new Date(), f.backupMaxAgeHours);
+  out.push(bk.state === "off" ? c("base_backup", "Base backups monitored", "warn", "Nobody is told if backups stop: set TIGERIS_BACKUP_MAX_AGE_HOURS and have the backup script record its runs.")
+    : bk.state === "ok" ? c("base_backup", "Base backups monitored", "pass", bk.lastOkAt ? `The last good base backup finished ${bk.lastOkAgeHours} hours ago; the limit is ${bk.maxAgeHours} hours.` : "No backup has been recorded yet; the deployment is still inside the limit.")
+    : bk.state === "failing" ? c("base_backup", "Base backups monitored", "fail", "The most recent base backup failed. Point-in-time recovery needs a recent base backup; check the backup job.")
+    : bk.state === "overdue" ? c("base_backup", "Base backups monitored", "fail", `The last good base backup is ${bk.lastOkAgeHours} hours old; the limit is ${bk.maxAgeHours} hours.`)
+    : c("base_backup", "Base backups monitored", "fail", "No base backup has ever been recorded. Check that the backup job runs and can write to the database."));
   out.push(c("backup", "Restore drill done in this environment", "manual", "Run the backup restore drill and record the result before go-live."));
   out.push(c("pentest", "Independent penetration test", "manual", "Required by decision 11 before any client data."));
   out.push(c("mfa", "Multi-factor claim confirmed", "manual", "Sign in as an administrator and confirm the identity provider's token carries a multi-factor claim."));

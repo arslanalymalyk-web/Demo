@@ -42,11 +42,11 @@ if (cfg.alerts.enabled) {
 }
 const documents = new DocumentQueue(pool, cfg.institutionId, () => new Date(), scanner);
 const scheduler = cfg.scheduler.enabled ? new Scheduler({ pool, institutionId: cfg.institutionId, run: ingestJob(pool, cfg.institutionId), tickMs: cfg.scheduler.tickSeconds * 1000, log: (m, o) => console.log(JSON.stringify({ level: "info", msg: m, ...o })) }) : null;
-const alertRunner = mailer ? new AlertRunner({ pool, institutionId: cfg.institutionId, mailer, baseUrl: cfg.alerts.baseUrl, engine: { reminderHours: cfg.alerts.reminderHours, maxPerHour: cfg.alerts.maxPerHour }, ...(scanner ? { scanner: async () => ({ configured: true, reachable: await scanner.ping().then(() => true, () => false) }) } : {}), log: (m, o) => console.log(JSON.stringify({ level: "info", msg: m, ...o })) }) : null;
+const alertRunner = mailer ? new AlertRunner({ pool, institutionId: cfg.institutionId, mailer, baseUrl: cfg.alerts.baseUrl, backupMaxAgeHours: cfg.backupMaxAgeHours, engine: { reminderHours: cfg.alerts.reminderHours, maxPerHour: cfg.alerts.maxPerHour }, ...(scanner ? { scanner: async () => ({ configured: true, reachable: await scanner.ping().then(() => true, () => false) }) } : {}), log: (m, o) => console.log(JSON.stringify({ level: "info", msg: m, ...o })) }) : null;
 const app = buildServer({
   scanner, pool, institutionId: cfg.institutionId, verifier: oidcVerifier(cfg.oidc, remoteKeys(cfg.oidc.jwksUri)), documents, clientDataEnabled: cfg.clientDataEnabled,
   logger: { level: cfg.logLevel, redact: { paths: ["req.headers.authorization", "req.headers.cookie", "res.headers['set-cookie']"], remove: true } },
-  reasoning: adapter ? { adapter } : null, scheduler, alerts: mailer ? { mailer, baseUrl: cfg.alerts.baseUrl, ...(alertRunner ? { runner: alertRunner } : {}) } : null, rateLimit: cfg.rateLimit, metricsToken: cfg.metricsToken, trustProxy: cfg.trustProxy,
+  reasoning: adapter ? { adapter } : null, scheduler, backupMaxAgeHours: cfg.backupMaxAgeHours, alerts: mailer ? { mailer, baseUrl: cfg.alerts.baseUrl, ...(alertRunner ? { runner: alertRunner } : {}) } : null, rateLimit: cfg.rateLimit, metricsToken: cfg.metricsToken, trustProxy: cfg.trustProxy,
 });
 await app.listen({ port: cfg.port, host: cfg.host });
 const resumed = await documents.resume();

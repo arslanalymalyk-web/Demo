@@ -6,7 +6,7 @@ import { plan, record, type EngineConfig, type Outcome } from "./engine.js";
 import { MailError, type Mailer } from "./mailer.js";
 import { render } from "./templates.js";
 
-export interface RunnerOptions { pool: pg.Pool; institutionId: string; mailer: Mailer; engine: EngineConfig; baseUrl: string; scanner?: () => Promise<{ configured: boolean; reachable: boolean }>; tickMs?: number; auditEveryMs?: number; now?: () => Date; log?: (msg: string, o?: object) => void }
+export interface RunnerOptions { pool: pg.Pool; institutionId: string; mailer: Mailer; engine: EngineConfig; baseUrl: string; scanner?: () => Promise<{ configured: boolean; reachable: boolean }>; backupMaxAgeHours?: number; tickMs?: number; auditEveryMs?: number; now?: () => Date; log?: (msg: string, o?: object) => void }
 export interface AlertTick { planned: number; sent: number; failed: number; skipped: number }
 
 /** Looks for conditions that need a person once a minute and sends the notices that are due. One pass at a time, in this process. */
@@ -33,7 +33,7 @@ export class AlertRunner {
   private async context(now: Date): Promise<Context> {
     const every = this.o.auditEveryMs ?? 6 * 3_600_000;
     if (!this.auditCheck || now.getTime() - this.auditCheck.at >= every) this.auditCheck = { at: now.getTime(), ok: (await withTenant(this.o.pool, this.o.institutionId, c => verifyAuditChain(c))).ok };
-    return { auditOk: this.auditCheck.ok, scanner: this.o.scanner ? await this.o.scanner().catch(() => null) : null };
+    return { auditOk: this.auditCheck.ok, scanner: this.o.scanner ? await this.o.scanner().catch(() => null) : null, backupMaxAgeHours: this.o.backupMaxAgeHours ?? 0 };
   }
 
   private async pass(): Promise<AlertTick> {

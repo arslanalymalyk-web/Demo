@@ -45,7 +45,7 @@ These need something only a person or a real environment can give. None blocks s
 ## What I would add next, in order
 
 1. **Translate the remaining screens, and compose computed sentences in Arabic.** Today the executive screens are translated but signal titles, caveats and drafts are English. This is the most visible gap for a Gulf audience. Needs the reviewer first.
-2. **Monitor base-backup age.** The database cannot see it, so "backup overdue" is not alerted. A heartbeat written by the backup script would close this.
+2. ~~Monitor base-backup age.~~ **Done:** the backup script now records each run (good or failed) in the database; a missed, failed or never-recorded backup alerts administrators, blocks Readiness and appears in metrics. Still to do: schedule the job in the client's environment and run the restore drill there.
 3. **Pagination and search on large lists.** Lists are capped at 200 rows with no cursor. Fine for the first client's data; needed as evidence grows.
 4. **Soak and large-data tests.** Run the schedulers, alert runner and document queue for days, and load a data set an order of magnitude larger, through the proxy.
 5. **Token revocation.** Tokens are valid until they expire and are held in memory only. Set short lifetimes in the identity provider; consider a server-side deny list for an urgent removal.

@@ -6,6 +6,10 @@ _Confidential. Property of Tiger Capital AI. Prepared for operators._
 
 The Readiness screen (administrators and auditors) lists what is still open for real use: two administrators, an auditor, the decision policy, approved sources, stored records, which settings are still on code defaults, the map geography, the audit chain and the scanner. "Blocks use" must be cleared; "Needs a decision" is for the institution; "Confirm by hand" covers the restore drill, the penetration test and the multi-factor claim. Check it after every change to the configuration.
 
+## Backups
+
+Readiness shows "Base backups monitored". If it says the last backup is overdue, failed, or never recorded, check the host job that runs `backup.sh`, the backup disk and the key file, then run the job by hand. A good run clears the alert by itself. Backups are watched here, not proved: run the restore drill in your environment before go-live and after any change to the scripts.
+
 ## Daily checks
 
 - `/health` returns ok and `/ready` returns ready (database reachable, migrations current).

@@ -56,7 +56,7 @@ Production start-up refuses weak or missing configuration and lists every proble
 5. Stand up the institution: `docker compose --profile setup run --rm setup apply --name "Client Fund" --jurisdiction SA --admin <subject>:"First Admin" --admin <subject>:"Second Admin" [--auditor <subject>:"Name"]`. Subjects are the identity provider's `sub` for each person. It creates the institution, the seven roles, the administrators (two are required, because settings and policy changes need one person to draft and another to approve), the default decision policy and the source registry, and prints `TIGERIS_INSTITUTION_ID`. Put that value in `.env`. It is safe to run again with `--institution-id`.
 6. Start the API and the proxy. Check `/health` and `/ready` through the proxy. Sign in as the first administrator and open Readiness: it lists what is still open.
 7. Confirm each source's licence and approve it, load the Gulf geography (`pnpm geography`), and have the second administrator activate the settings the institution decides.
-8. Start the backup service and run the restore drill in [BACKUP-RESTORE.md](BACKUP-RESTORE.md) before go-live.
+8. Schedule `backup.sh` daily from the host (it records each run so a missed or failed backup raises an alert; see [BACKUP-RESTORE.md](BACKUP-RESTORE.md)) and run the restore drill in [BACKUP-RESTORE.md](BACKUP-RESTORE.md) before go-live.
 9. Review the image inventory produced by CI and the SBOM in `docs/handover/sbom`.
 
 ## Alerts by email

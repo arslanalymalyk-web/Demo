@@ -300,7 +300,7 @@ suite("alerts against a real database", () => {
   });
   it("shows on Readiness whether alerts can reach anyone", async () => {
     const w = await world();
-    const f = (alerts: { configured: boolean; transport: string | null }) => withTenant(app, w.id, c => installationReadiness(c, { clientDataEnabled: false, scanner: { configured: false, reachable: false }, scheduler: { enabled: false }, reasoning: { provider: null }, alerts })).then(r => r.checks.find(x => x.id === "alerts")!);
+    const f = (alerts: { configured: boolean; transport: string | null }) => withTenant(app, w.id, c => installationReadiness(c, { clientDataEnabled: false, scanner: { configured: false, reachable: false }, scheduler: { enabled: false }, reasoning: { provider: null }, alerts, backupMaxAgeHours: 0 })).then(r => r.checks.find(x => x.id === "alerts")!);
     expect(await f({ configured: false, transport: null })).toMatchObject({ status: "warn", detail: expect.stringMatching(/No alert channel/) });
     expect(await f({ configured: true, transport: "log" })).toMatchObject({ status: "warn" });
     expect(await f({ configured: true, transport: "smtp" })).toMatchObject({ status: "pass", detail: expect.stringMatching(/3 people have an address/) });

@@ -17,7 +17,7 @@ import { SCOPES, SCOPE_INFO, DEFAULT_SIGNAL_RULES, SettingsError, activate as ac
 import { SECTORS, buildMap, buildSector, composeBriefing, isPack, type BriefingCase, type BriefingRun } from "../../../packages/sectors/src/index.js";
 import { connectorFor } from "../../../packages/connectors/src/index.js";
 import { ReasoningError, listCalls, runReasoning, type ModelAdapter } from "../../../packages/reasoning/src/index.js";
-import { CATEGORIES, MUTABLE, sendTest, type AlertRunner, type Mailer } from "../../../packages/alerts/src/index.js";
+import { CATEGORIES, MUTABLE, backupStatus, sendTest, type AlertRunner, type Mailer } from "../../../packages/alerts/src/index.js";
 import { installationReadiness } from "../../../packages/setup/src/index.js";
 import { SchedulerError, pauseSource, requestRun, resumeSource, sourceHealth, type Scheduler } from "../../../packages/scheduler/src/index.js";
 import { getLineage, verifyAuditChain } from "../../../packages/ingest/src/lineage.js";
@@ -125,7 +125,7 @@ declare module "fastify" { interface FastifyRequest { principal?: Principal } }
  * The institution is fixed by deployment configuration (one deployment per institution).
  * Every route except /health needs a bearer token from the institution's identity provider and a provisioned, active principal with the right role.
  */
-export interface ServerOptions { pool: pg.Pool; institutionId: string; verifier: TokenVerifier; documents?: DocumentQueue; clientDataEnabled?: boolean; logger?: FastifyServerOptions["logger"]; rateLimit?: { max: number; timeWindow: string } | null; metricsToken?: string | null; trustProxy?: boolean; reasoning?: { adapter: ModelAdapter; perHour?: number } | null; scheduler?: Scheduler | null; scanner?: Scanner | null; alerts?: { mailer: Mailer; baseUrl: string; runner?: AlertRunner } | null }
+export interface ServerOptions { pool: pg.Pool; institutionId: string; verifier: TokenVerifier; documents?: DocumentQueue; clientDataEnabled?: boolean; logger?: FastifyServerOptions["logger"]; rateLimit?: { max: number; timeWindow: string } | null; metricsToken?: string | null; trustProxy?: boolean; reasoning?: { adapter: ModelAdapter; perHour?: number } | null; scheduler?: Scheduler | null; scanner?: Scanner | null; alerts?: { mailer: Mailer; baseUrl: string; runner?: AlertRunner } | null; backupMaxAgeHours?: number }
 
 export function buildServer(opts: ServerOptions): FastifyInstance {
   const app = Fastify({
@@ -148,6 +148,8 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   new Gauge({ name: "tigeris_ingest_jobs_24h", help: "Ingestion jobs started in the last 24 hours, by outcome", labelNames: ["status"], registers: [registry], async collect() { this.reset(); const rows = await withTenant(opts.pool, opts.institutionId, async c => (await c.query("SELECT status, count(*)::int AS n FROM ingestion_jobs WHERE started_at > now() - interval '24 hours' GROUP BY status")).rows).catch(() => []); for (const s of ["completed", "failed", "running"]) this.set({ status: s }, rows.find((r: { status: string; n: number }) => r.status === s)?.n ?? 0); } });
   new Gauge({ name: "tigeris_alert_conditions_open", help: "Alert conditions that are open, by category", labelNames: ["category"], registers: [registry], async collect() { this.reset(); const rows = await withTenant(opts.pool, opts.institutionId, async c => (await c.query("SELECT category, count(*)::int AS n FROM alert_conditions WHERE state = 'open' GROUP BY category")).rows).catch(() => []); for (const k of ["malware", "source", "review", "operations"]) this.set({ category: k }, rows.find((r: { category: string; n: number }) => r.category === k)?.n ?? 0); } });
   new Gauge({ name: "tigeris_alert_deliveries_24h", help: "Alert messages attempted in the last 24 hours, by result", labelNames: ["status"], registers: [registry], async collect() { this.reset(); const rows = await withTenant(opts.pool, opts.institutionId, async c => (await c.query("SELECT status, count(*)::int AS n FROM alert_deliveries WHERE created_at > now() - interval '24 hours' GROUP BY status")).rows).catch(() => []); for (const s of ["sent", "failed", "skipped"]) this.set({ status: s }, rows.find((r: { status: string; n: number }) => r.status === s)?.n ?? 0); } });
+  new Gauge({ name: "tigeris_last_backup_age_hours", help: "Hours since the last good base backup was recorded (absent when none, or when monitoring is off)", registers: [registry], async collect() { const b = await withTenant(opts.pool, opts.institutionId, c => backupStatus(c, new Date(), opts.backupMaxAgeHours ?? 0)).catch(() => null); if (b?.lastOkAgeHours != null) this.set(b.lastOkAgeHours); } });
+  new Gauge({ name: "tigeris_backup_failures_24h", help: "Base backups recorded as failed in the last 24 hours", registers: [registry], async collect() { const b = await withTenant(opts.pool, opts.institutionId, c => backupStatus(c, new Date(), opts.backupMaxAgeHours ?? 1)).catch(() => null); this.set(b?.failedLast24h ?? 0); } });
   new Gauge({ name: "tigeris_scheduler_enabled", help: "1 when scheduled ingestion is running in this process", registers: [registry], collect() { this.set(opts.scheduler ? 1 : 0); } });
   // The scanner is pinged at most every 30 seconds, whoever asks.
   let scanProbe: { at: number; up: boolean; version: string | null } | null = null;
@@ -462,7 +464,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   });
 
   // Installation readiness: what is still open before real use. Read from stored facts and the running configuration.
-  app.get("/v1/readiness", async () => { const sc = await scannerState(); return tenant(c => installationReadiness(c, { clientDataEnabled: opts.clientDataEnabled === true, scanner: { configured: sc.configured, reachable: sc.reachable }, scheduler: { enabled: !!opts.scheduler }, alerts: { configured: !!opts.alerts, transport: opts.alerts?.mailer.transport ?? null }, reasoning: { provider: opts.reasoning ? `${opts.reasoning.adapter.provider} · ${opts.reasoning.adapter.model}` : null } })); });
+  app.get("/v1/readiness", async () => { const sc = await scannerState(); return tenant(c => installationReadiness(c, { clientDataEnabled: opts.clientDataEnabled === true, scanner: { configured: sc.configured, reachable: sc.reachable }, scheduler: { enabled: !!opts.scheduler }, alerts: { configured: !!opts.alerts, transport: opts.alerts?.mailer.transport ?? null }, backupMaxAgeHours: opts.backupMaxAgeHours ?? 0, reasoning: { provider: opts.reasoning ? `${opts.reasoning.adapter.provider} · ${opts.reasoning.adapter.model}` : null } })); });
   // Source health and scheduled ingestion. The schedule is a governed setting; these routes read state and let an operator run, pause or resume one source.
   app.get("/v1/sources/health", async () => tenant(async c => {
     const { schedule, version } = await effectiveSchedule(c);

@@ -118,6 +118,8 @@ services:
       TIGERIS_SMTP_USER: ${TIGERIS_SMTP_USER:-}
       TIGERIS_ALERTS_FROM: ${TIGERIS_ALERTS_FROM:-}
       TIGERIS_WEB_BASE_URL: https://${SERVER_NAME:-localhost}
+      # Base backups are recorded by the backup script. If the newest good one is older than this many hours, or the newest run failed, administrators are alerted. 0 turns it off.
+      TIGERIS_BACKUP_MAX_AGE_HOURS: ${TIGERIS_BACKUP_MAX_AGE_HOURS:-36}
       TIGERIS_SCHEDULER_ENABLED: ${TIGERIS_SCHEDULER_ENABLED:-false}
       TIGERIS_SCHEDULER_TICK_SECONDS: ${TIGERIS_SCHEDULER_TICK_SECONDS:-60}
       LOG_LEVEL: ${LOG_LEVEL:-info}

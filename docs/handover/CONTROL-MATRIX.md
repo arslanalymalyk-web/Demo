@@ -23,7 +23,7 @@ This is a self-assessment of the build against SOC 2 (Trust Services Criteria) f
 | C15 | Production configuration checks | CC8.1 | A.8.9 | Implemented | `apps/api/src/config.ts` tests |
 | C16 | Structured logs with redaction; request ids | CC7.1, CC7.2 | A.8.15, A.8.16 | Implemented | pino setup, global error handler |
 | C17 | Health, readiness and Prometheus metrics | A1.1, CC7.1 | A.8.16 | Implemented | `/health`, `/ready`, `/metrics` |
-| C18 | Encrypted point-in-time backups | A1.2 | A.8.13 | Partial (Debian layout drill only) | `deploy/backup`, drill results |
+| C18 | Encrypted point-in-time backups | A1.2 | A.8.13 | Partial (Debian layout drill only; monitoring of base backups added) | `deploy/backup`, drill results |
 | C19 | Restore verified, audit chain checked | A1.3 | A.8.13, A.5.30 | Partial (not in client environment) | `verify-restore.sh` |
 | C20 | High availability | A1.2 | A.8.14 | Gap (single node by decision) | VERIFICATION-REPORT item 7 |
 | C21 | Ten-year retention, holds, exports | C1.2, PI1.5 | A.5.33, A.8.10 | Implemented | `packages/retention` |
@@ -55,3 +55,4 @@ This is a self-assessment of the build against SOC 2 (Trust Services Criteria) f
 | C47 | Repeatable first-run set-up, identity-provider checks, readiness report, two administrators required | CC8.1, CC5.2 | A.8.9, A.5.3 | Implemented (identity provider checks tested against fakes only) | `packages/setup`, `tests/setup.test.ts` |
 | C48 | Alert notices by email: one per condition, reminders, no record content | CC7.3, CC2.3 | A.5.24, A.6.8 | Implemented (tested against a stand-in relay only) | `packages/alerts`, `tests/alerts.test.ts` |
 | C49 | Delivery log of every notice, immutable; addresses audited | CC7.2 | A.8.15 | Implemented | `alert_deliveries`, audit events `alert.*` |
+| C50 | Base backups recorded and monitored: a missed or failed backup alerts and blocks readiness | A1.2, CC7.2 | A.8.13, A.8.16 | Implemented (drill on a scratch cluster; not in the official image) | `backup_runs`, `tests/backup.test.ts`, `drill-debian.sh` |

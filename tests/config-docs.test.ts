@@ -16,7 +16,7 @@ describe("configuration reference", () => {
     expect(used.size).toBeGreaterThan(40);
   });
   it("does not document a variable nothing reads", () => {
-    const doc = read(join(root, "docs/handover/CONFIGURATION.md")), code = ["apps", "packages", "scripts", "db", "e2e", "tests", "deploy", "playwright.config.ts"].flatMap(d => { try { return statSync(join(root, d)).isDirectory() ? walk(join(root, d)) : [join(root, d)]; } catch { return []; } }).map(read).join("\n") + read(join(root, "deploy/compose/docker-compose.yml"));
+    const doc = read(join(root, "docs/handover/CONFIGURATION.md")), code = ["apps", "packages", "scripts", "db", "e2e", "tests", "deploy", "playwright.config.ts"].flatMap(d => { try { return statSync(join(root, d)).isDirectory() ? walk(join(root, d)) : [join(root, d)]; } catch { return []; } }).map(read).join("\n") + read(join(root, "deploy/compose/docker-compose.yml")) + readdirSync(join(root, "deploy/backup")).filter(f => f.endsWith(".sh")).map(f => read(join(root, "deploy/backup", f))).join("\n");
     const names = [...doc.matchAll(/`([A-Z][A-Z0-9_]{3,})`/g)].map(m => m[1]!).filter(n => !["NODE_ENV"].includes(n));
     const unused = [...new Set(names)].filter(n => !code.includes(n) && !code.includes(n.replace(/_FILE$/, "")));
     expect(unused).toEqual([]);
