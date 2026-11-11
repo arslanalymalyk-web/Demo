@@ -28,6 +28,14 @@ _Confidential. Property of Tiger Capital AI. Prepared for the named recipients o
 3. A host, TLS certificate, secret store and backup location.
 4. The names of the first administrators (two, for settings approval).
 
+## Alerts
+
+1. The client's mail relay: host, port, TLS mode, a sender address and an account, and a network path from the API to it. Then try it with a real send.
+2. The address people use to open TIGERIS (links in the messages point there).
+3. Who should have an address and receive which notices; the steward named in the ingestion schedule receives source notices.
+4. A native Arabic reviewer for the Arabic text of the messages (`packages/alerts/src/templates.ts`).
+5. Decide how the age of the last base backup should be monitored, since the database cannot see it.
+
 ## Arabic interface
 
 1. A native Arabic reviewer for `apps/web/src/i18n-ar.ts` and the terms table in [I18N.md](I18N.md), before the interface is shown to a client.

@@ -139,3 +139,9 @@ export interface SourceHealthView { asOf: string; scheduler: { enabled: boolean;
 
 export interface ReadinessCheck { id: string; title: string; status: "pass" | "warn" | "fail" | "manual"; detail: string; href?: string }
 export interface ReadinessView { ready: boolean; checks: ReadinessCheck[] }
+
+export interface AlertCondition { condition_key: string; category: "malware" | "source" | "review" | "operations"; kind: "event" | "state"; state: "open" | "resolved"; ref: string | null; link: string | null; detail: string | null; first_seen_at: string; last_seen_at: string; last_notified_at: string | null; notify_count: number; attempts: number; resolved_at: string | null }
+export interface AlertDelivery { id: string; condition_key: string; category: string; kind: "raised" | "reminder" | "resolved" | "test"; status: "sent" | "failed" | "skipped"; reason: string | null; created_at: string; person: string }
+export interface AlertsView { configured: boolean; transport: string | null; lastPassAt: string | null; conditions: AlertCondition[]; deliveries: AlertDelivery[] }
+export interface MyAlerts { configured: boolean; email: string | null; categories: { category: AlertCondition["category"]; mutable: boolean; enabled: boolean }[] }
+export interface AlertAddress { id: string; name: string; subject: string; email: string | null; disabled: boolean; roles: string[] }

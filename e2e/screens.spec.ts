@@ -9,7 +9,7 @@ export const SCREENS: [string, string, string][] = [
   ["/source-health", "Source health", "source health"], ["/sources", "Data & Sources", "sources"], ["/evidence", "Evidence", "evidence"], ["/documents", "Documents", "documents"],
   ["/series", "Series", "series"], ["/map", "Map", "map"], ["/graph", "Graph", "graph"], ["/scenarios", "Scenarios", "scenarios"], ["/cases", "Cases", "cases"],
   ["/handoffs", "Handoffs", "handoffs"], ["/memory", "Institutional Memory", "memory"], ["/policy", "Policy", "policy"], ["/settings", "Settings", "settings"],
-  ["/assistant", "Assistant", "assistant"], ["/retention", "Retention", "retention"], ["/audit", "Audit", "audit"], ["/readiness", "Readiness", "readiness"], ["/admin", "Administration", "administration"],
+  ["/assistant", "Assistant", "assistant"], ["/retention", "Retention", "retention"], ["/audit", "Audit", "audit"], ["/readiness", "Readiness", "readiness"], ["/alerts", "Alerts", "alerts"], ["/admin", "Administration", "administration"],
 ];
 
 test.describe("every screen", () => {

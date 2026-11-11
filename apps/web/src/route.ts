@@ -1,5 +1,5 @@
 import { tx } from "./i18n";
-export interface Route { view: "home" | "sources" | "evidence" | "series" | "graph" | "scenarios" | "run" | "audit" | "admin" | "cases" | "case" | "handoffs" | "memory" | "policy" | "documents" | "document" | "sector" | "settings" | "map" | "retention" | "briefing" | "assistant" | "sourcehealth" | "readiness" | "missing"; id: string | null }
+export interface Route { view: "home" | "sources" | "evidence" | "series" | "graph" | "scenarios" | "run" | "audit" | "admin" | "cases" | "case" | "handoffs" | "memory" | "policy" | "documents" | "document" | "sector" | "settings" | "map" | "retention" | "briefing" | "assistant" | "sourcehealth" | "readiness" | "alerts" | "missing"; id: string | null }
 
 export function parseRoute(hash: string): Route {
   const parts = hash.replace(/^#\/?/, "").split("/").filter(Boolean).map(decodeURIComponent);
@@ -11,7 +11,7 @@ export function parseRoute(hash: string): Route {
   if (a === "briefing" && (b === "energy" || b === "sovereign") && !c) return { view: "briefing", id: b };
   if (a === "documents") return b ? { view: "document", id: b } : { view: "documents", id: null };
   if (a === "cases") return b ? { view: "case", id: b } : { view: "cases", id: null };
-  if (["sources", "graph", "audit", "admin", "handoffs", "memory", "policy", "settings", "map", "retention", "assistant", "source-health", "readiness"].includes(a) && !b) return { view: (a === "source-health" ? "sourcehealth" : a) as Route["view"], id: null };
+  if (["sources", "graph", "audit", "admin", "handoffs", "memory", "policy", "settings", "map", "retention", "assistant", "source-health", "readiness", "alerts"].includes(a) && !b) return { view: (a === "source-health" ? "sourcehealth" : a) as Route["view"], id: null };
   if ((a === "evidence" || a === "series") && parts.length <= 2) return { view: a, id: b ?? null };
   return { view: "missing", id: null };
 }
@@ -38,6 +38,7 @@ export const NAV: NavItem[] = [
   { href: "#/policy", label: tx("Policy"), view: ["policy"], need: "policy.read" },
   { href: "#/settings", label: tx("Settings"), view: ["settings"], need: "settings.read" },
   { href: "#/retention", label: tx("Retention"), view: ["retention"], need: "retention.read" },
+  { href: "#/alerts", label: tx("Alerts"), view: ["alerts"], need: "sources.read" },
   { href: "#/readiness", label: tx("Readiness"), view: ["readiness"], need: "identity.read" },
   { href: "#/audit", label: tx("Audit"), view: ["audit"], need: "audit.verify" },
   { href: "#/admin", label: tx("Administration"), view: ["admin"], need: "identity.read" },

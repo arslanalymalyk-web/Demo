@@ -7,6 +7,7 @@ export interface Config {
   oidc: { issuer: string; audience: string; jwksUri: string; requireMfa: boolean };
   reasoning: { provider: "off" | "anthropic" | "openai_compatible" | "local_extractive"; model: string; baseUrl: string; apiKey: string | null };
   scheduler: { enabled: boolean; tickSeconds: number };
+  alerts: { enabled: boolean; transport: "smtp" | "log"; host: string; port: number; security: "starttls" | "tls" | "none"; user: string | null; password: string | null; from: string; baseUrl: string; reminderHours: number; maxPerHour: number };
   scanner: { kind: "off" | "clamav" | "stub"; host: string; port: number; socket: string };
   clientDataEnabled: boolean; metricsToken: string | null; trustProxy: boolean; logLevel: string; rateLimit: { max: number; timeWindow: string } | null;
 }
@@ -42,6 +43,19 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   if (kind === "clamav" && !clamSocket && (!clamHost || !Number.isInteger(clamPort) || clamPort < 1 || clamPort > 65535)) problems.push("TIGERIS_SCANNER=clamav needs TIGERIS_CLAMAV_HOST and TIGERIS_CLAMAV_PORT, or TIGERIS_CLAMAV_SOCKET");
   if (production && kind === "stub") problems.push("TIGERIS_SCANNER=stub is not protection and is refused in production");
   if (env.TIGERIS_CLIENT_DATA_ENABLED === "true" && kind !== "clamav") problems.push("institution documents need a real malware scanner: set TIGERIS_SCANNER=clamav (decision 11)");
+  const al = { enabled: env.TIGERIS_ALERTS_ENABLED === "true", transport: env.TIGERIS_ALERTS_TRANSPORT ?? "smtp", host: env.TIGERIS_SMTP_HOST ?? "", port: Number(env.TIGERIS_SMTP_PORT ?? 587), security: env.TIGERIS_SMTP_SECURITY ?? "starttls", user: env.TIGERIS_SMTP_USER || null, password: env.TIGERIS_SMTP_PASSWORD || null, from: env.TIGERIS_ALERTS_FROM ?? "", baseUrl: env.TIGERIS_WEB_BASE_URL ?? "", reminderHours: Number(env.TIGERIS_ALERTS_REMINDER_HOURS ?? 24), maxPerHour: Number(env.TIGERIS_ALERTS_MAX_PER_HOUR ?? 120) };
+  if (al.enabled) {
+    if (!["smtp", "log"].includes(al.transport)) problems.push("TIGERIS_ALERTS_TRANSPORT must be smtp or log");
+    if (!["starttls", "tls", "none"].includes(al.security)) problems.push("TIGERIS_SMTP_SECURITY must be starttls, tls or none");
+    if (al.transport === "smtp" && (!al.host || !Number.isInteger(al.port) || al.port < 1 || al.port > 65535)) problems.push("TIGERIS_SMTP_HOST and a valid TIGERIS_SMTP_PORT are required for alerts");
+    if (!/^[^\s<>",;]+@[^\s<>",;]+\.[^\s<>",;]+$/.test(al.from.replace(/^.*<(.+)>$/, "$1"))) problems.push("TIGERIS_ALERTS_FROM must be an email address");
+    try { new URL(al.baseUrl); } catch { problems.push("TIGERIS_WEB_BASE_URL must be the address people use to open TIGERIS"); }
+    if (production && al.transport !== "smtp") problems.push("TIGERIS_ALERTS_TRANSPORT=log is not delivery and is refused in production");
+    if (production && al.security === "none") problems.push("TIGERIS_SMTP_SECURITY=none is refused in production: the relay must be reached over TLS");
+    if (production && al.baseUrl && !al.baseUrl.startsWith("https://")) problems.push("TIGERIS_WEB_BASE_URL must use https in production");
+    if (!Number.isFinite(al.reminderHours) || al.reminderHours < 1 || al.reminderHours > 168) problems.push("TIGERIS_ALERTS_REMINDER_HOURS must be between 1 and 168");
+    if (!Number.isInteger(al.maxPerHour) || al.maxPerHour < 1 || al.maxPerHour > 2000) problems.push("TIGERIS_ALERTS_MAX_PER_HOUR must be between 1 and 2000");
+  }
   const tick = Number(env.TIGERIS_SCHEDULER_TICK_SECONDS ?? 60);
   if (!Number.isFinite(tick) || tick < 10 || tick > 3600) problems.push("TIGERIS_SCHEDULER_TICK_SECONDS must be between 10 and 3600");
   const max = Number(env.RATE_LIMIT_PER_MINUTE ?? 600);
@@ -49,6 +63,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   if (problems.length) throw new Error(`configuration refused:\n - ${problems.join("\n - ")}`);
   return {
     production, databaseUrl, institutionId, port: Number(env.PORT ?? 3000), host: env.HOST ?? "127.0.0.1", oidc: { issuer, audience, jwksUri, requireMfa },
+    alerts: al as Config["alerts"],
     scanner: { kind: kind as Config["scanner"]["kind"], host: clamHost, port: clamPort, socket: clamSocket },
     scheduler: { enabled: env.TIGERIS_SCHEDULER_ENABLED === "true", tickSeconds: tick },
     reasoning: { provider: provider as Config["reasoning"]["provider"], model, baseUrl, apiKey },

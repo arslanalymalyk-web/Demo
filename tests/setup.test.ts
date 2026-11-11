@@ -70,7 +70,7 @@ suite("first-run set-up against a real database", () => {
   beforeAll(() => { owner = new pg.Pool({ connectionString: ownerUrl! }); app = new pg.Pool({ connectionString: appUrl! }); });
   afterAll(async () => { await owner.end(); await app.end(); });
   const input = (over: Partial<BootstrapInput> = {}): BootstrapInput => ({ institutionId: randomUUID(), name: "Client Fund", jurisdiction: "SA", issuer: ISS, admins: [{ subject: "a1", name: "First Admin" }, { subject: "a2" }], auditors: [{ subject: "aud" }], registryFile: null, ...over });
-  const facts = { clientDataEnabled: false, scanner: { configured: false, reachable: false }, scheduler: { enabled: false }, reasoning: { provider: null } };
+  const facts = { clientDataEnabled: false, scanner: { configured: false, reachable: false }, scheduler: { enabled: false }, reasoning: { provider: null }, alerts: { configured: false, transport: null } };
 
   it("finds the database ready, and says what is missing when it is not", async () => {
     const cs = await checkDatabase(owner, app);

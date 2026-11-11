@@ -19,6 +19,7 @@ _Confidential. Property of Tiger Capital AI. Prepared for Tiger Capital AI and t
 | Model produces false or injected content | Output is JSON verified by code: cited facts must exist, every number must appear in them, advice, links and markup are refused; any failure rejects the whole draft; the model has no database access; drafts are never records |
 | Data leaves to a model vendor | Off by default; data-class gate (public record, sample, scenario only); case text never sent; https, no redirects, key from the secret store; every call logged with prompt hash |
 | Scheduler widens egress | Off by default; the API stays on an internal network until the client adds the egress network and allowlists exact source hosts; only approved sources with a registered connector can be scheduled; the schedule is a two-person governed setting; requests are rate limited and honour robots rules; runs are time limited and every transition is audited |
+| Alerts leak data or can be abused | Notices are fixed text with a category, a plain reference code and an application link only; rendering refuses anything else; a test checks no digits outside the link and reference; TLS to the relay is verified and production refuses an unencrypted relay; addresses are checked by the database for line breaks (header injection) and by the mailer; one recipient per message; hourly cap; every attempt logged by person, not address |
 | Supply chain | Pinned dependencies, zero known vulnerabilities at last audit, licence allowlist, SBOM, offline bundle, CI audit |
 
 ## Control inventory

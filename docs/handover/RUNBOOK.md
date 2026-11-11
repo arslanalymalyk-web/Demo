@@ -65,6 +65,10 @@ Logs are JSON with secrets redacted. Every response carries a request id; use it
 | Uploads rejected | Over size or page limit, unsafe type, or institution documents not enabled |
 | Rate limited (429) | Limit per address reached; check for a proxy that hides client addresses |
 
+## Alerts
+
+The Alerts screen (administrators and auditors) lists open and recent conditions and every message attempted, with who it was for and the result. "Send a test to me" checks the relay. If messages fail with "could not be reached", check the relay address, port, TLS mode and the network path; with "refused the credentials", the relay password. Failed notices are retried with back-off and then wait for the next daily reminder. Someone with no address is recorded as skipped: set it on the screen. Read failed rows in the message log; there is no separate metric for them. Operations notices cover the audit chain, the malware scanner and the database log archive; the age of the last base backup is not visible to the database, so keep checking that separately.
+
 ## Malware scanner
 
 The Documents screen shows the scanner status, files waiting for a scan, and any flagged file. If the scanner stops answering, new uploads are held unopened and retried every few minutes (up to every 15), then processed when it returns; nothing is treated as clean. A flagged file stays quarantined for good: it is recorded with its signature, its bytes are not kept, and no one can release it. Keep signatures current (the ClamAV container refreshes them through its egress network); alert on `tigeris_scanner_up` at 0 and on `tigeris_documents_by_scan{status="infected"}` above 0.

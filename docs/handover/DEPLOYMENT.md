@@ -59,6 +59,10 @@ Production start-up refuses weak or missing configuration and lists every proble
 8. Start the backup service and run the restore drill in [BACKUP-RESTORE.md](BACKUP-RESTORE.md) before go-live.
 9. Review the image inventory produced by CI and the SBOM in `docs/handover/sbom`.
 
+## Alerts by email
+
+Off by default. Set `TIGERIS_ALERTS_ENABLED=true`, `TIGERIS_SMTP_HOST`, `TIGERIS_SMTP_PORT`, `TIGERIS_SMTP_SECURITY` (`starttls` or `tls`), `TIGERIS_SMTP_USER`, the password as a mounted secret (`TIGERIS_SMTP_PASSWORD_FILE`), `TIGERIS_ALERTS_FROM` and `TIGERIS_WEB_BASE_URL` (the address people use to open TIGERIS; links in the messages point there). Give the API container a network path to the relay only. Then an administrator sets each person's address on the Alerts screen and sends a test message. Production refuses an unencrypted relay and a plain-http web address. A notice contains a category, an optional reference code and a link, never figures or record content. Not yet tried against a real relay.
+
 ## Malware scanner
 
 Start the scanner with `docker compose --profile scanner up -d` and set `TIGERIS_SCANNER=clamav` (host `clamav`, port 3310 by default). The ClamAV container sits on the internal network and on the egress network so it can refresh signatures; restrict that egress to the ClamAV signature hosts and pin the image by digest. It is required before institution documents are enabled: configuration refuses client-data mode without it and start-up refuses to run if it does not answer. Not yet built or started in this build.

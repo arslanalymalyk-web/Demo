@@ -109,6 +109,15 @@ services:
       TIGERIS_SCANNER: ${TIGERIS_SCANNER:-off}                        # off | clamav
       TIGERIS_CLAMAV_HOST: ${TIGERIS_CLAMAV_HOST:-clamav}
       TIGERIS_CLAMAV_PORT: ${TIGERIS_CLAMAV_PORT:-3310}
+      # Alerts by email through the client's own mail relay. Off by default. The relay must be reachable from this container (add its network),
+      # and the relay password goes in a mounted secret: TIGERIS_SMTP_PASSWORD_FILE.
+      TIGERIS_ALERTS_ENABLED: ${TIGERIS_ALERTS_ENABLED:-false}
+      TIGERIS_SMTP_HOST: ${TIGERIS_SMTP_HOST:-}
+      TIGERIS_SMTP_PORT: ${TIGERIS_SMTP_PORT:-587}
+      TIGERIS_SMTP_SECURITY: ${TIGERIS_SMTP_SECURITY:-starttls}
+      TIGERIS_SMTP_USER: ${TIGERIS_SMTP_USER:-}
+      TIGERIS_ALERTS_FROM: ${TIGERIS_ALERTS_FROM:-}
+      TIGERIS_WEB_BASE_URL: https://${SERVER_NAME:-localhost}
       TIGERIS_SCHEDULER_ENABLED: ${TIGERIS_SCHEDULER_ENABLED:-false}
       TIGERIS_SCHEDULER_TICK_SECONDS: ${TIGERIS_SCHEDULER_TICK_SECONDS:-60}
       LOG_LEVEL: ${LOG_LEVEL:-info}

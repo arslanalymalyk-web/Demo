@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { accessibilityBasics, go, signIn, watch } from "./helpers.js";
 
 // The same screens as the English suite, in Arabic. Screens not yet translated still have to lay out right to left without errors.
-const ALL = ["/", "/sector/energy", "/sector/sovereign", "/briefing/energy", "/briefing/sovereign", "/source-health", "/sources", "/evidence", "/documents", "/series", "/map", "/graph", "/scenarios", "/cases", "/handoffs", "/memory", "/policy", "/settings", "/assistant", "/retention", "/audit", "/readiness", "/admin"];
+const ALL = ["/", "/sector/energy", "/sector/sovereign", "/briefing/energy", "/briefing/sovereign", "/source-health", "/sources", "/evidence", "/documents", "/series", "/map", "/graph", "/scenarios", "/cases", "/handoffs", "/memory", "/policy", "/settings", "/assistant", "/retention", "/audit", "/readiness", "/alerts", "/admin"];
 const TRANSLATED: [string, string][] = [["/", "مركز القيادة"], ["/sector/energy", "الطاقة والنفط"], ["/sector/sovereign", "رأس المال السيادي والخزينة"], ["/briefing/energy", "إحاطة: الطاقة والنفط"], ["/briefing/sovereign", "إحاطة: رأس المال السيادي والخزينة"], ["/source-health", "سلامة المصادر"], ["/assistant", "المساعد"], ["/readiness", "الجاهزية"]];
 const toArabic = async (page: Page) => { await page.getByRole("button", { name: "العربية" }).click(); await expect(page.locator("html")).toHaveAttribute("lang", "ar"); };
 

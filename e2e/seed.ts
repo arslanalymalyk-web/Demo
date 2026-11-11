@@ -38,6 +38,7 @@ const issuer = `http://127.0.0.1:${process.env.DEV_IDP_PORT ?? 4011}`;
 for (const [sub, roles] of Object.entries(PEOPLE)) await withTenant(app, id, c => provisionPrincipal(c, id, { type: "system" }, { issuer, subject: sub, displayName: sub, roles }));
 
 await withTenant(app, id, c => ensureDefaultPolicy(c, id));
+for (const [sub, email] of [["admin1", "admin1@e2e.example"], ["aud", "aud@e2e.example"]]) await withTenant(app, id, c => c.query("UPDATE principals SET email = $2 WHERE idp_subject = $1", [sub, email]));
 const src = (series: string) => SOURCES.find(s => s[0] === series)![1];
 const ing = (series: string, rs: RawRecord[]) => runIngestion({ pool: app, institutionId: id, sourceKey: src(series), connector: { platform: "fake", async *fetchRecords() { for (const r of rs) yield r; } } as Connector, http: noNetwork });
 const m14 = months(14), q = quarters();

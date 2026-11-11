@@ -15,6 +15,7 @@ _Confidential. Property of Tiger Capital AI. Prepared for the client's IT and se
 | 7 | API | Case exports (download) | Case record, audit events, integrity hash | Permission `export.run`; export itself recorded |
 | 8 | Database | Backup service | Base backups and write-ahead log | Encrypted before storage; key from the client's secret store |
 | 9 | Monitoring system | `/metrics` | Counters and timings, no record content | Separate bearer token; blocked at the proxy from outside |
+| 12 | API | The client's mail relay (only when alerts are on) | A short fixed notice: category, optional reference code, link. No figures, no record content, no names | TLS to the relay verified, credentials from the secret store, one recipient per message, every attempt logged by person and result |
 | 10 | API | Handoff to the institution's own systems | Human-authorized tasks | A person owns each handoff; no automatic execution |
 | 11 | API | The configured model endpoint (only when a model is connected) | A prompt of numbered stored facts, public-record, sample and scenario classes only | https required in production, host on the network allowlist, key from the secret store, no redirects, every call logged. Institution data, licensed and third-party derived data are withheld; text typed into cases is never sent |
 

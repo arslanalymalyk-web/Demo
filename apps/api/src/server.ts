@@ -17,6 +17,7 @@ import { SCOPES, SCOPE_INFO, DEFAULT_SIGNAL_RULES, SettingsError, activate as ac
 import { SECTORS, buildMap, buildSector, composeBriefing, isPack, type BriefingCase, type BriefingRun } from "../../../packages/sectors/src/index.js";
 import { connectorFor } from "../../../packages/connectors/src/index.js";
 import { ReasoningError, listCalls, runReasoning, type ModelAdapter } from "../../../packages/reasoning/src/index.js";
+import { CATEGORIES, MUTABLE, sendTest, type AlertRunner, type Mailer } from "../../../packages/alerts/src/index.js";
 import { installationReadiness } from "../../../packages/setup/src/index.js";
 import { SchedulerError, pauseSource, requestRun, resumeSource, sourceHealth, type Scheduler } from "../../../packages/scheduler/src/index.js";
 import { getLineage, verifyAuditChain } from "../../../packages/ingest/src/lineage.js";
@@ -80,6 +81,12 @@ const ACCESS: Record<string, Permission | null | "public"> = {
   "GET /v1/sectors/:pack": "series.read",
   "GET /v1/briefings/:pack": "series.read",
   "GET /v1/readiness": "identity.read",
+  "GET /v1/alerts": "alerts.read",
+  "GET /v1/alerts/mine": "sources.read",
+  "PUT /v1/alerts/mine": "sources.read",
+  "GET /v1/alerts/addresses": "alerts.manage",
+  "PUT /v1/alerts/addresses/:id": "alerts.manage",
+  "POST /v1/alerts/test": "alerts.manage",
   "GET /v1/sources/health": "sources.read",
   "POST /v1/sources/:key/run": "ingest.manage",
   "POST /v1/sources/:key/pause": "ingest.manage",
@@ -118,7 +125,7 @@ declare module "fastify" { interface FastifyRequest { principal?: Principal } }
  * The institution is fixed by deployment configuration (one deployment per institution).
  * Every route except /health needs a bearer token from the institution's identity provider and a provisioned, active principal with the right role.
  */
-export interface ServerOptions { pool: pg.Pool; institutionId: string; verifier: TokenVerifier; documents?: DocumentQueue; clientDataEnabled?: boolean; logger?: FastifyServerOptions["logger"]; rateLimit?: { max: number; timeWindow: string } | null; metricsToken?: string | null; trustProxy?: boolean; reasoning?: { adapter: ModelAdapter; perHour?: number } | null; scheduler?: Scheduler | null; scanner?: Scanner | null }
+export interface ServerOptions { pool: pg.Pool; institutionId: string; verifier: TokenVerifier; documents?: DocumentQueue; clientDataEnabled?: boolean; logger?: FastifyServerOptions["logger"]; rateLimit?: { max: number; timeWindow: string } | null; metricsToken?: string | null; trustProxy?: boolean; reasoning?: { adapter: ModelAdapter; perHour?: number } | null; scheduler?: Scheduler | null; scanner?: Scanner | null; alerts?: { mailer: Mailer; baseUrl: string; runner?: AlertRunner } | null }
 
 export function buildServer(opts: ServerOptions): FastifyInstance {
   const app = Fastify({
@@ -453,7 +460,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   });
 
   // Installation readiness: what is still open before real use. Read from stored facts and the running configuration.
-  app.get("/v1/readiness", async () => { const sc = await scannerState(); return tenant(c => installationReadiness(c, { clientDataEnabled: opts.clientDataEnabled === true, scanner: { configured: sc.configured, reachable: sc.reachable }, scheduler: { enabled: !!opts.scheduler }, reasoning: { provider: opts.reasoning ? `${opts.reasoning.adapter.provider} · ${opts.reasoning.adapter.model}` : null } })); });
+  app.get("/v1/readiness", async () => { const sc = await scannerState(); return tenant(c => installationReadiness(c, { clientDataEnabled: opts.clientDataEnabled === true, scanner: { configured: sc.configured, reachable: sc.reachable }, scheduler: { enabled: !!opts.scheduler }, alerts: { configured: !!opts.alerts, transport: opts.alerts?.mailer.transport ?? null }, reasoning: { provider: opts.reasoning ? `${opts.reasoning.adapter.provider} · ${opts.reasoning.adapter.model}` : null } })); });
   // Source health and scheduled ingestion. The schedule is a governed setting; these routes read state and let an operator run, pause or resume one source.
   app.get("/v1/sources/health", async () => tenant(async c => {
     const { schedule, version } = await effectiveSchedule(c);
@@ -471,6 +478,52 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   app.post("/v1/sources/:key/run", async (req, reply) => { if (!opts.scheduler) return reply.code(409).send({ error: "conflict", message: "Scheduled ingestion is not running in this deployment. Run the ingest command instead." }); const r = await sched(req, reply, (c, k) => requestRun(c, opts.institutionId, req.principal!.id, k, new Date()), false); void opts.scheduler.tick().catch(() => undefined); return r; });
   app.post("/v1/sources/:key/pause", async (req, reply) => sched(req, reply, (c, k, why) => pauseSource(c, opts.institutionId, req.principal!.id, k, why, new Date()), true));
   app.post("/v1/sources/:key/resume", async (req, reply) => sched(req, reply, (c, k, why) => resumeSource(c, opts.institutionId, req.principal!.id, k, why, new Date()), true));
+
+  // Alerts: a short notice by email when something needs a person. The message carries a category, a reference code and a link, never record content.
+  const maskEmail = (e: string | null) => e ? `${e[0]}***@${e.split("@")[1]}` : null;
+  const testLimiter = new RateLimiter(5, 3_600_000);
+  app.get("/v1/alerts", async () => tenant(async c => ({
+    configured: !!opts.alerts, transport: opts.alerts?.mailer.transport ?? null, lastPassAt: opts.alerts?.runner?.lastTickAt?.toISOString() ?? null,
+    conditions: (await c.query("SELECT condition_key, category, kind, state, ref, link, detail, first_seen_at, last_seen_at, last_notified_at, notify_count, attempts, resolved_at FROM alert_conditions WHERE state = 'open' OR resolved_at > now() - interval '7 days' ORDER BY state, last_seen_at DESC LIMIT 100")).rows,
+    deliveries: (await c.query("SELECT d.id, d.condition_key, d.category, d.kind, d.status, d.reason, d.created_at, COALESCE(p.display_name, p.idp_subject) AS person FROM alert_deliveries d JOIN principals p ON p.id = d.principal_id ORDER BY d.created_at DESC LIMIT 100")).rows,
+  })));
+  app.get("/v1/alerts/mine", async req => tenant(async c => {
+    const me = (await c.query("SELECT email FROM principals WHERE id = $1", [req.principal!.id])).rows[0]?.email as string | null | undefined;
+    const off = new Set((await c.query("SELECT category FROM alert_preferences WHERE principal_id = $1 AND enabled = false", [req.principal!.id])).rows.map(r => r.category as string));
+    return { configured: !!opts.alerts, email: maskEmail(me ?? null), categories: CATEGORIES.map(k => ({ category: k, mutable: MUTABLE.includes(k), enabled: !off.has(k) })) };
+  }));
+  app.put("/v1/alerts/mine", async (req, reply) => {
+    const b = z.object({ category: z.enum(["source", "review"]), enabled: z.boolean() }).safeParse(req.body);
+    if (!b.success) return bad(reply, b.error);
+    await tenant(async c => {
+      await c.query("INSERT INTO alert_preferences (institution_id, principal_id, category, enabled) VALUES ($1,$2,$3,$4) ON CONFLICT (institution_id, principal_id, category) DO UPDATE SET enabled = EXCLUDED.enabled, updated_at = now()", [opts.institutionId, req.principal!.id, b.data.category, b.data.enabled]);
+      await audit(c, opts.institutionId, { actorType: "principal", actorId: req.principal!.id, action: "alerts.preference_set", objectType: "principal", objectId: req.principal!.id, payload: b.data });
+    });
+    return { ok: true };
+  });
+  app.get("/v1/alerts/addresses", async () => tenant(async c => (await c.query("SELECT p.id, COALESCE(p.display_name, p.idp_subject) AS name, p.idp_subject AS subject, p.email, p.disabled_at IS NOT NULL AS disabled, COALESCE(array_agg(r.key ORDER BY r.key) FILTER (WHERE r.key IS NOT NULL), '{}') AS roles FROM principals p LEFT JOIN principal_roles pr ON pr.principal_id = p.id AND pr.institution_id = p.institution_id LEFT JOIN roles r ON r.id = pr.role_id AND r.institution_id = pr.institution_id GROUP BY p.id ORDER BY name")).rows));
+  app.put("/v1/alerts/addresses/:id", async (req, reply) => {
+    const id = idOf(req), b = z.object({ email: z.string().trim().min(3).max(254).nullable() }).safeParse(req.body);
+    if (!id.success) return reply.code(400).send({ error: "invalid_id" }); if (!b.success) return bad(reply, b.error);
+    try {
+      await tenant(async c => {
+        const r = await c.query("UPDATE principals SET email = $2 WHERE id = $1 RETURNING id", [id.data, b.data.email]);
+        if (!r.rowCount) throw new IdentityError("person not found", "not_found");
+        await audit(c, opts.institutionId, { actorType: "principal", actorId: req.principal!.id, action: "alerts.address_set", objectType: "principal", objectId: id.data, payload: { set: b.data.email !== null, domain: b.data.email ? b.data.email.split("@")[1] : null } });
+      });
+    } catch (e) {
+      if (e instanceof IdentityError) return reply.code(404).send({ error: e.code, message: e.message });
+      if ((e as { code?: string }).code === "23514") return reply.code(422).send({ error: "invalid", message: "that is not a valid email address" });
+      throw e;
+    }
+    return { ok: true };
+  });
+  app.post("/v1/alerts/test", async (req, reply) => {
+    if (!opts.alerts) return reply.code(409).send({ error: "conflict", message: "Alerts are not configured on this deployment." });
+    const wait = testLimiter.check(req.principal!.id);
+    if (wait > 0) return reply.code(429).send({ error: "rate_limited", message: "Too many test messages this hour." });
+    return sendTest({ pool: opts.pool, institutionId: opts.institutionId, mailer: opts.alerts.mailer, baseUrl: opts.alerts.baseUrl, principalId: req.principal!.id });
+  });
 
   // Reasoning: a model drafts, fixed code verifies, a person decides. Off unless a model is configured. Every call is recorded and audited.
   const reasoningLimiter = new RateLimiter(opts.reasoning?.perHour ?? 30, 3_600_000);
