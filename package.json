@@ -19,6 +19,7 @@
     "dev": "node --env-file=.env --import tsx apps/api/src/main.ts",
     "scenario": "node --env-file=.env --import tsx packages/scenario/src/cli.ts",
     "setup": "node --env-file=.env --import tsx packages/setup/src/cli.ts",
+    "retention": "node --env-file=.env --import tsx packages/retention/src/cli.ts",
     "identity": "node --env-file=.env --import tsx packages/identity/src/cli.ts",
     "dev-idp": "node --env-file=.env scripts/dev-idp.mjs",
     "web": "vite --config apps/web/vite.config.ts",

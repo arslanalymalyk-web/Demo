@@ -91,7 +91,8 @@ Nothing is deleted automatically. Use the Retention screen for the ten-year repo
 - **Everyone:** `POST /v1/identity/revoke-all-sessions` with a reason. Everyone, including you, signs in again.
 - **Session length:** tokens are honoured for `OIDC_MAX_TOKEN_AGE_SECONDS` (eight hours by default) after the provider issued them. Set shorter in the provider as well.
 - **Emergency stop:** Administration, "Emergency stop", with a reason. Reading, uploads, model calls and scheduled fetches are refused for everyone; administrators and auditors can still see people, end sessions, check the audit trail and release the stop. It is a software stop: for a harder one, also suspend the egress network on the host.
-- **Audit checkpoints:** set `TIGERIS_AUDIT_ANCHOR_KEY` (at least 32 characters, from the secret store, not readable by the database administrator). An auditor takes a checkpoint on the Audit page weekly and keeps the file somewhere the database administrator cannot change, and checks the newest one after any incident or any maintenance by someone with full database rights.
+- **Audit checkpoints:** set `TIGERIS_AUDIT_ANCHOR_KEY` (at least 32 characters, from the secret store, not readable by the database administrator). Set `TIGERIS_AUDIT_CHECKPOINT_DIR` to a write-once or remote mount the database administrator cannot change, and the API saves a signed checkpoint there every `TIGERIS_AUDIT_CHECKPOINT_HOURS` (24); an alert follows if none is saved for twice that. Once a month, and after any incident or any maintenance by someone with full database rights, an auditor checks the newest file on the Audit page.
+- **Leaving, or giving a regulator everything:** `pnpm retention export <new folder>` writes every table as plain files with a manifest; `pnpm retention verify-export <folder>` checks it anywhere, with no database. The export is recorded in the audit trail.
 
 ## Incident basics
 

@@ -39,7 +39,8 @@ _Confidential. Property of Tiger Capital AI. Prepared for the named recipients o
 ## Sovereignty
 
 1. A decision on the egress route: a forward proxy with an allowlist and a host firewall rule, built and tested in the client's environment (SOVEREIGNTY.md gap A).
-2. Where audit checkpoints are kept (a write-once location the database administrator cannot change) and who checks them.
+2. Where audit checkpoints are kept (a write-once mount the database administrator cannot change, set as `TIGERIS_AUDIT_CHECKPOINT_DIR`) and who checks them.
+6. Decide how institution documents are encrypted and searched (SOVEREIGNTY.md gap B): search over text held in memory, or no search over institution documents.
 3. A break-glass sign-in path for when the identity provider is unavailable, and who may use it.
 4. A vendor-access policy: no standing access, how time-limited access is approved and recorded.
 5. Whether granting `administrator` or `approver` should need a second administrator.

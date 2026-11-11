@@ -29,6 +29,8 @@ Every setting is an environment variable. A variable marked **secret** may inste
 | `OIDC_JWKS_URI` | required | The provider's signing keys. https in production. |
 | `OIDC_MAX_TOKEN_AGE_SECONDS` | 28800 | Longest a token is honoured after the identity provider issued it, whatever its own expiry says; tokens with no issue time are refused while this is on. 0 turns the limit off. Sessions can also be ended at any time by an administrator (see SECURITY.md). |
 | `TIGERIS_AUDIT_ANCHOR_KEY` | none | Secret of at least 32 characters (also read from `TIGERIS_AUDIT_ANCHOR_KEY_FILE`) that signs audit checkpoints. Without it the checkpoint routes answer 409. Keep it away from the database administrator. |
+| `TIGERIS_AUDIT_CHECKPOINT_DIR` | none | Folder where a signed audit checkpoint is saved on a schedule (read-only files, written atomically). Use a write-once or remote mount the database administrator cannot change. Needs `TIGERIS_AUDIT_ANCHOR_KEY`. An alert goes to administrators and auditors when none has been saved for twice the interval. |
+| `TIGERIS_AUDIT_CHECKPOINT_HOURS` | 24 | Hours between scheduled checkpoints (1 to 720). |
 | `OIDC_REQUIRE_MFA_CLAIM` | true | Tokens must carry a multi-factor claim (`amr` or `acr`). Turning it off in production also needs `TIGERIS_ALLOW_NO_MFA_CLAIM=true`, so it is a recorded decision. |
 | `TIGERIS_ALLOW_NO_MFA_CLAIM` | false | See above. |
 | `OIDC_CLIENT_ID` | `tigeris-web` | The web app's public client id (proxy and set-up). |

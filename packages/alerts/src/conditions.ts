@@ -6,7 +6,7 @@ import type { Category } from "./templates.js";
 
 export interface Audience { roles: string[]; principals: string[] }
 export interface Desired { key: string; category: Category; kind: "event" | "state"; ref: string | null; link: string; detail: string | null; audience: Audience }
-export interface Context { auditOk: boolean | null; scanner: { configured: boolean; reachable: boolean } | null; backupMaxAgeHours?: number }
+export interface Context { auditOk: boolean | null; scanner: { configured: boolean; reachable: boolean } | null; backupMaxAgeHours?: number; checkpointMaxAgeHours?: number }
 
 const ADMINS = ["administrator", "auditor"];
 
@@ -31,6 +31,11 @@ export async function desiredConditions(c: pg.PoolClient, ctx: Context, now: Dat
   // Base backups: the backup script records each run, so a missed or failed one is visible here. Monitoring is off unless a limit is set.
   const bk = await backupStatus(c, now, ctx.backupMaxAgeHours ?? 0);
   if (["overdue", "failing", "never"].includes(bk.state)) out.push({ key: "ops:backup", category: "operations", kind: "state", ref: null, link: "/#/readiness", detail: bk.state, audience: { roles: ADMINS, principals: [] } });
+  // Signed audit checkpoints: when they are scheduled, a missing one means the folder is unwritable or the job stopped. Off unless a limit is set.
+  if ((ctx.checkpointMaxAgeHours ?? 0) > 0) {
+    const t = (await c.query("SELECT COALESCE(max(occurred_at) FILTER (WHERE action = 'audit.checkpoint_saved'), min(occurred_at)) AS t FROM audit_events")).rows[0].t as Date | null;
+    if (t && now.getTime() - new Date(t).getTime() > ctx.checkpointMaxAgeHours! * 3_600_000) out.push({ key: "ops:audit_checkpoint", category: "operations", kind: "state", ref: null, link: "/#/audit", detail: "overdue", audience: { roles: ADMINS, principals: [] } });
+  }
   return out;
 }
 

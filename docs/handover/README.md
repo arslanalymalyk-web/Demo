@@ -22,7 +22,7 @@ TIGERIS AI OS is an institution-owned, model-agnostic intelligence system where 
 | `db/migrations` | Nineteen numbered SQL migrations, run by the owner role only |
 | `deploy/` | Container, proxy, database and backup files |
 | `docs/adr`, `docs/decisions` | Twenty-six architecture decision records and the 200-answer decision log with its resolutions |
-| `tests/`, `e2e/` | 338 unit and integration tests (one needs a real ClamAV daemon and is skipped without one) and 36 browser tests |
+| `tests/`, `e2e/` | 343 unit and integration tests (one needs a real ClamAV daemon and is skipped without one) and 36 browser tests |
 | `scripts/` | Database bootstrap, SBOM and licence check, offline bundle, geography build |
 
 ## Rules that bind everyone (from `CLAUDE.md`)

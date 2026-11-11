@@ -1,6 +1,7 @@
 import pg from "pg";
 import { DocumentQueue, clamavScanner, stubScanner, type Scanner } from "../../../packages/documents/src/index.js";
 import { getLockdown, oidcVerifier, remoteKeys } from "../../../packages/identity/src/index.js";
+import { CheckpointRunner } from "../../../packages/ingest/src/anchor-runner.js";
 import { withTenant } from "../../../packages/ingest/src/store.js";
 import { anthropicAdapter, extractiveAdapter, openAiCompatibleAdapter, type ModelAdapter } from "../../../packages/reasoning/src/index.js";
 import { AlertRunner, createMailer, type Mailer } from "../../../packages/alerts/src/index.js";
@@ -43,7 +44,8 @@ if (cfg.alerts.enabled) {
 }
 const documents = new DocumentQueue(pool, cfg.institutionId, () => new Date(), scanner);
 const scheduler = cfg.scheduler.enabled ? new Scheduler({ pool, institutionId: cfg.institutionId, run: ingestJob(pool, cfg.institutionId), tickMs: cfg.scheduler.tickSeconds * 1000, halted: () => withTenant(pool, cfg.institutionId, async c => (await getLockdown(c)).locked), log: (m, o) => console.log(JSON.stringify({ level: "info", msg: m, ...o })) }) : null;
-const alertRunner = mailer ? new AlertRunner({ pool, institutionId: cfg.institutionId, mailer, baseUrl: cfg.alerts.baseUrl, backupMaxAgeHours: cfg.backupMaxAgeHours, engine: { reminderHours: cfg.alerts.reminderHours, maxPerHour: cfg.alerts.maxPerHour }, ...(scanner ? { scanner: async () => ({ configured: true, reachable: await scanner.ping().then(() => true, () => false) }) } : {}), log: (m, o) => console.log(JSON.stringify({ level: "info", msg: m, ...o })) }) : null;
+const alertRunner = mailer ? new AlertRunner({ pool, institutionId: cfg.institutionId, mailer, baseUrl: cfg.alerts.baseUrl, backupMaxAgeHours: cfg.backupMaxAgeHours, ...(cfg.checkpoint ? { checkpointMaxAgeHours: cfg.checkpoint.everyHours * 2 } : {}), engine: { reminderHours: cfg.alerts.reminderHours, maxPerHour: cfg.alerts.maxPerHour }, ...(scanner ? { scanner: async () => ({ configured: true, reachable: await scanner.ping().then(() => true, () => false) }) } : {}), log: (m, o) => console.log(JSON.stringify({ level: "info", msg: m, ...o })) }) : null;
+const checkpoints = cfg.checkpoint && cfg.auditAnchorKey ? new CheckpointRunner({ pool, institutionId: cfg.institutionId, key: cfg.auditAnchorKey, dir: cfg.checkpoint.dir, everyHours: cfg.checkpoint.everyHours, log: (msg, o) => console.log(JSON.stringify({ level: "info", msg, ...o })) }) : null;
 const app = buildServer({
   scanner, pool, institutionId: cfg.institutionId, verifier: oidcVerifier(cfg.oidc, remoteKeys(cfg.oidc.jwksUri)), documents, clientDataEnabled: cfg.clientDataEnabled,
   logger: { level: cfg.logLevel, redact: { paths: ["req.headers.authorization", "req.headers.cookie", "res.headers['set-cookie']"], remove: true } },
@@ -53,6 +55,7 @@ await app.listen({ port: cfg.port, host: cfg.host });
 const resumed = await documents.resume();
 scheduler?.start();
 alertRunner?.start();
+checkpoints?.start();
 documents.startRetrying();
 app.log.info({ port: cfg.port, host: cfg.host, production: cfg.production, resumedDocuments: resumed, metrics: cfg.metricsToken !== null, scheduler: scheduler ? `every ${cfg.scheduler.tickSeconds}s` : "off", alerts: mailer ? mailer.transport : "off", reasoning: adapter ? `${adapter.provider}/${adapter.model}` : "off" }, "api started");
 
@@ -61,5 +64,5 @@ let closing = false;
 for (const sig of ["SIGTERM", "SIGINT"] as const) process.on(sig, async () => {
   if (closing) return; closing = true; app.log.info({ sig }, "shutting down");
   const timer = setTimeout(() => process.exit(1), 25_000); timer.unref();
-  try { await app.close(); await documents.idle(); await scheduler?.stop(); await alertRunner?.stop(); await pool.end(); } finally { process.exit(0); }
+  try { await app.close(); await documents.idle(); await scheduler?.stop(); await alertRunner?.stop(); checkpoints?.stop(); await pool.end(); } finally { process.exit(0); }
 });
