@@ -2,7 +2,7 @@
 # One image per role. Build:  docker build --target app -t tigeris-app .   and   docker build --target web -t tigeris-web .
 # Base images are pinned by digest (dependabot proposes updates); scripts/release.mjs refuses a release if any reference is not.
 
-FROM node:22-bookworm-slim@sha256:5ec23b7c622b00547753bc6ffd78085dd868a68aeb41c8e0a1418f033e13d96d AS deps
+FROM node:25-bookworm-slim@sha256:81db02c4b671288a03915da9534dbd54f96d0e7c24d80ccc54f5b36b2e684370 AS deps
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@10.28.0 --activate
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
@@ -13,7 +13,7 @@ COPY . .
 RUN pnpm typecheck && pnpm web:build
 
 # --- API, migrations and the command-line tools. No compiler, no test tools, runs as an unprivileged user.
-FROM node:22-bookworm-slim@sha256:5ec23b7c622b00547753bc6ffd78085dd868a68aeb41c8e0a1418f033e13d96d AS app
+FROM node:25-bookworm-slim@sha256:81db02c4b671288a03915da9534dbd54f96d0e7c24d80ccc54f5b36b2e684370 AS app
 RUN apt-get update && apt-get install -y --no-install-recommends tini ca-certificates poppler-utils tesseract-ocr tesseract-ocr-eng tesseract-ocr-ara \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
